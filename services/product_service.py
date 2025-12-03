@@ -340,10 +340,61 @@ class ProductService:
 
         return updated_count, added_count, errors
 
+    def _parse_tabular_price_list(self, file_path: str, is_csv: bool = False) -> List[Dict]:
+        """
+        Parse Excel/CSV files without requiring OCR/Google Vision.
+
+        Args:
+            file_path: Path to Excel/CSV file
+            is_csv: Whether the file is CSV (defaults to Excel parsing)
+
+        Returns:
+            List of product dictionaries with name/price keys
+        """
+        import pandas as pd  # Local import to avoid overhead if unused
+
+        df = pd.read_csv(file_path) if is_csv else pd.read_excel(file_path)
+
+        def detect_column(keywords: List[str]) -> Optional[str]:
+            for col in df.columns:
+                if any(keyword in str(col).lower() for keyword in keywords):
+                    return col
+            return None
+
+        name_col = detect_column(['name', 'product', 'item', 'tên', 'sản phẩm'])
+        price_col = detect_column(['price', 'cost', 'giá', 'gia'])
+
+        if not name_col or not price_col:
+            raise ValueError("Could not detect name and price columns in the uploaded file.")
+
+        products: List[Dict] = []
+        for _, row in df.iterrows():
+            name = str(row[name_col]).strip()
+            price = row[price_col]
+
+            if pd.isna(name) or pd.isna(price) or name.lower() in ("", "nan"):
+                continue
+
+            if isinstance(price, str):
+                price = price.replace(',', '').replace('.', '')
+
+            try:
+                price_value = float(price)
+            except (TypeError, ValueError):
+                continue
+
+            products.append({
+                'name': name,
+                'price': price_value,
+                'source': 'csv' if is_csv else 'excel'
+            })
+
+        return products
+
     def import_from_file(
         self,
         file_path: str,
-        ocr_service: OCRService,
+        ocr_service: Optional[OCRService] = None,
         update_existing: bool = True,
         add_new: bool = True
     ) -> Tuple[int, int, List[str]]:
@@ -352,7 +403,7 @@ class ProductService:
 
         Args:
             file_path: Path to file
-            ocr_service: OCR service instance
+            ocr_service: OCR service instance (required for image/PDF)
             update_existing: Update existing products
             add_new: Add new products
 
@@ -360,7 +411,17 @@ class ProductService:
             Tuple of (updated_count, added_count, error_messages)
         """
         try:
-            products_data = ocr_service.auto_parse_price_list(file_path)
+            ext = os.path.splitext(file_path)[1].lower()
+
+            if ext in ('.xlsx', '.xls'):
+                products_data = self._parse_tabular_price_list(file_path, is_csv=False)
+            elif ext == '.csv':
+                products_data = self._parse_tabular_price_list(file_path, is_csv=True)
+            else:
+                if ocr_service is None:
+                    raise ValueError("OCR service is not configured for image/PDF import.")
+                products_data = ocr_service.auto_parse_price_list(file_path)
+
             return self.import_from_price_list(products_data, update_existing, add_new)
         except Exception as e:
             return 0, 0, [f"Error importing file: {str(e)}"]

@@ -11,6 +11,7 @@ downloads/
 eggs/
 .eggs/
 lib/
+!react-frontend/**/lib/
 lib64/
 parts/
 sdist/
@@ -20,6 +21,11 @@ wheels/
 .installed.cfg
 *.egg
 MANIFEST
+
+# Node.js
+node_modules/
+react-frontend/dist/
+react-frontend/build/
 
 # Virtual Environment
 venv/
