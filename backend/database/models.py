@@ -97,7 +97,7 @@ class Invoice(Base):
     total = Column(Float, nullable=False)
 
     # Status
-    status = Column(String(50), default='pending')  # pending, paid, cancelled
+    status = Column(String(50), default='pending', index=True)  # pending, paid, cancelled
     payment_method = Column(String(50), nullable=True)  # cash, transfer, card
 
     # Notes

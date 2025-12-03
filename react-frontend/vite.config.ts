@@ -10,4 +10,33 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  build: {
+    // Enable code splitting for better performance
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Vendor chunks - large libraries
+          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+          'vendor-query': ['@tanstack/react-query'],
+          'vendor-ui': ['lucide-react'],
+          // Page chunks - code split by route
+          'pages-home': ['./src/pages/HomePage.tsx'],
+          'pages-products': ['./src/pages/ProductsPage.tsx'],
+          'pages-customers': ['./src/pages/CustomersPage.tsx'],
+          'pages-invoices': ['./src/pages/InvoicesPage.tsx'],
+          'pages-stats': ['./src/pages/StatsPage.tsx'],
+        },
+      },
+    },
+    // Minification settings
+    minify: 'terser',
+    terserOptions: {
+      compress: {
+        drop_console: true, // Remove console.log in production
+        drop_debugger: true,
+      },
+    },
+    // Chunk size warnings
+    chunkSizeWarningLimit: 1000,
+  },
 })

@@ -7,24 +7,9 @@ import {
     useCustomers,
     useCustomerSearch,
     useDeleteCustomer,
-    useCustomerStats
 } from '@/hooks/useCustomers'
 import { useDebounce } from '@/hooks/useDebounce'
-import { formatCurrency } from '@/lib/utils'
 import { Search, Trash2, UserRound } from 'lucide-react'
-
-function CustomerStats({ customerId }: { customerId: number }) {
-    const { data } = useCustomerStats(customerId)
-
-    if (!data) return null
-
-    return (
-        <div className="mt-2 grid grid-cols-2 gap-2 text-sm text-muted-foreground">
-            <p>🧾 Đơn hàng: {data.total_orders}</p>
-            <p>💰 Chi tiêu: {formatCurrency(data.total_spent)}</p>
-        </div>
-    )
-}
 
 export function CustomersPage() {
     const [searchQuery, setSearchQuery] = useState('')
@@ -101,7 +86,9 @@ export function CustomersPage() {
                                     {customer.address && (
                                         <p className="text-sm text-muted-foreground">📍 {customer.address}</p>
                                     )}
-                                    <CustomerStats customerId={customer.id} />
+                                    {customer.notes && (
+                                        <p className="mt-2 text-sm text-muted-foreground">📝 {customer.notes}</p>
+                                    )}
                                 </CardContent>
                             </Card>
                         ))}

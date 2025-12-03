@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import type { ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
+import { useIsFetching } from '@tanstack/react-query'
 import { cn } from '@/lib/utils'
 import {
     Home,
@@ -29,14 +30,20 @@ const menuItems = [
 
 export function Layout({ children }: LayoutProps) {
     const location = useLocation()
-    const [showSplash, setShowSplash] = useState(true)
+    const [isFirstLoad, setIsFirstLoad] = useState(true)
+    const isFetching = useIsFetching()
 
     useEffect(() => {
-        const timer = setTimeout(() => setShowSplash(false), 2000)
-        return () => clearTimeout(timer)
-    }, [])
+        // Hide splash screen after initial data loads
+        if (isFirstLoad && isFetching === 0) {
+            // Small delay to ensure smooth transition
+            const timer = setTimeout(() => setIsFirstLoad(false), 300)
+            return () => clearTimeout(timer)
+        }
+    }, [isFetching, isFirstLoad])
 
-    if (showSplash) {
+    // Show splash only on first load while fetching data
+    if (isFirstLoad && isFetching > 0) {
         return <SplashScreen />
     }
 

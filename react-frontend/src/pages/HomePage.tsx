@@ -1,6 +1,4 @@
-import { useStatistics, useInvoices } from '../hooks/useInvoices'
-import { useProducts } from '../hooks/useProducts'
-import { useCustomers } from '../hooks/useCustomers'
+import { useDashboard } from '../hooks/useDashboard'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { formatCurrency, formatDate } from '@/lib/utils'
@@ -9,26 +7,29 @@ import { useNavigate } from 'react-router-dom'
 import type { Invoice } from '@/types'
 
 export function HomePage() {
-    const { data: stats } = useStatistics()
-    const { data: products } = useProducts()
-    const { data: customers } = useCustomers()
-    const { data: invoices } = useInvoices()
+    const { data: dashboard, isLoading } = useDashboard()
     const navigate = useNavigate()
+
+    // Extract data from unified dashboard response
+    const stats = dashboard?.stats
+    const products = dashboard?.recent_products
+    const customers = dashboard?.recent_customers
+    const invoices = dashboard?.recent_invoices
 
     const metrics = [
         {
             title: '📦 Sản phẩm',
-            value: products?.length || 0,
+            value: stats?.total_products || 0,
             icon: Package,
         },
         {
             title: '👥 Khách hàng',
-            value: customers?.length || 0,
+            value: stats?.total_customers || 0,
             icon: Users,
         },
         {
             title: '🧾 Hóa đơn',
-            value: invoices?.length || 0,
+            value: stats?.total_invoices || 0,
             icon: FileText,
         },
         {

@@ -1,478 +1,117 @@
-# 📦 Hệ Thống Quản Lý Bán Hàng
+# 📦 Hệ Thống Quản Lý Bán Hàng (FastAPI + React)
 
-Ứng dụng web hiện đại giúp quản lý bán hàng, tồn kho và khách hàng với tính năng AI thông minh. Chạy được trên Windows, Linux, macOS.
+Ứng dụng web hiện đại quản lý sản phẩm, khách hàng, hóa đơn và báo giá với trợ giúp AI (OCR, tìm kiếm hình ảnh). Kiến trúc mới tách **FastAPI backend** và **React frontend** nhưng giữ nguyên chức năng cốt lõi.
 
-![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)
-![Streamlit](https://img.shields.io/badge/Streamlit-1.32+-green.svg)
+![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-teal.svg)
+![React](https://img.shields.io/badge/React-19-orange.svg)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
 
 ## ✨ Tính năng chính
+- **Quản lý sản phẩm**: CRUD, danh mục, đơn vị, tồn kho, lịch sử giá, nhiều ảnh.
+- **Nhập báo giá thông minh**: Excel/CSV (không cần OCR), ảnh/PDF qua Google Vision; tự cập nhật giá và thêm sản phẩm mới.
+- **Tìm kiếm AI**: tìm theo text; tìm theo hình ảnh (similarity score) nếu cấu hình Vision.
+- **Hóa đơn**: sinh số hóa đơn, lưu lịch sử, tải **PDF** / **Excel**, trạng thái thanh toán.
+- **Khách hàng**: lưu thông tin, thống kê chi tiêu và số đơn.
+- **Thống kê tổng quan**: doanh thu, số hóa đơn, trạng thái thanh toán, AOV.
 
-### 🛍️ Quản lý sản phẩm
-- ➕ Thêm, sửa, xóa sản phẩm
-- 📸 Quản lý hình ảnh sản phẩm (nhiều ảnh cho mỗi sản phẩm)
-- 💰 Theo dõi lịch sử thay đổi giá
-- 🏷️ Phân loại sản phẩm theo danh mục
-- 📊 Quản lý tồn kho
-
-### 📥 Nhập báo giá thông minh (AI-Powered)
-- 📷 **Đọc ảnh báo giá** - Chụp ảnh bảng giá → Tự động nhập
-- 📄 **Đọc PDF** - Upload PDF báo giá → Trích xuất tự động
-- 📊 **Đọc Excel/CSV** - Import trực tiếp từ bảng tính
-- 🔄 **Cập nhật tự động**:
-  - Sản phẩm đã có → Cập nhật giá mới
-  - Sản phẩm mới → Thêm vào danh sách
-- 📝 Ghi nhận lịch sử thay đổi giá
-
-### 🔍 Tìm kiếm AI
-- 📝 **Tìm theo text** - Gõ tên sản phẩm để tìm kiếm
-- 🖼️ **Tìm theo hình ảnh** - Upload ảnh sản phẩm → Tìm sản phẩm tương tự
-- 🎯 Độ chính xác cao với Google Vision AI
-- 📊 Hiển thị độ tương đồng (similarity score)
-
-### 🧾 Quản lý hóa đơn
-- 📝 Tạo hóa đơn nhanh chóng
-- 💾 Lưu trữ lịch sử đơn hàng
-- 📄 **Xuất PDF** - Hóa đơn chuyên nghiệp, dễ in ấn
-- 📊 **Xuất Excel** - Có thể chỉnh sửa, tính toán
-- 💸 Quản lý thanh toán (đã thanh toán, chưa thanh toán, đã hủy)
-
-### 👥 Quản lý khách hàng
-- 📇 Lưu trữ thông tin khách hàng đầy đủ
-- 📞 Thông tin liên hệ (SĐT, email, địa chỉ)
-- 📊 Lịch sử mua hàng
-- 💰 Thống kê chi tiêu của từng khách hàng
-
-### 📊 Thống kê & Báo cáo
-- 📈 Tổng sản phẩm, khách hàng, đơn hàng
-- 💵 Doanh thu
-- 📊 Báo cáo tổng quan kinh doanh
-
-## 🎨 Giao diện
-
-- ✅ Giao diện cực đẹp với **Streamlit** (Web-based)
-- 🌈 Thiết kế hiện đại, responsive
-- 📱 Hoạt động tốt trên Windows, Linux, macOS
-- ⚡ Tự động cập nhật, không cần refresh
-- 🎯 Navigation sidebar rõ ràng
-- 💨 Hiệu suất cao, mượt mà
-
-## 🛠️ Công nghệ sử dụng
-
-- **Python 3.8+** - Ngôn ngữ lập trình
-- **Streamlit** - Framework UI web (http://localhost:8501)
-- **SQLAlchemy + SQLite** - Database ORM + Storage
-- **Google Cloud Vision API** - OCR, Image Recognition
-- **ReportLab** - Tạo PDF
-- **OpenPyXL** - Xử lý Excel
-- **Pillow** - Xử lý hình ảnh
-- **Pandas** - Phân tích dữ liệu
-
-## 📋 Yêu cầu hệ thống
-
-- **OS**: Windows 10/11, Ubuntu/Debian, macOS
-- **Python**: 3.8 trở lên
-- **RAM**: 2GB trở lên
-- **Ổ cứng**: 500MB trống
+## 🏗️ Kiến trúc & Công nghệ
+- **Backend**: FastAPI, SQLAlchemy, SQLite, Pydantic, Uvicorn, ReportLab, OpenPyXL.
+- **Frontend**: React 19 + TypeScript, Vite, TailwindCSS + shadcn/ui, TanStack Query, React Router, Axios.
+- **AI** (tùy chọn): Google Cloud Vision (OCR & image search), sentence-transformers cho tìm kiếm hình ảnh.
+- **Dữ liệu**: lưu local tại `backend/data` (database, ảnh sản phẩm, file hóa đơn, file tạm).
 
 ## 📁 Cấu trúc thư mục
-
 ```
 Store-Management/
-├── data/                          # 📁 Tất cả dữ liệu (local)
-│   ├── store_management.db        # 🗄️ Database
-│   ├── images/
-│   │   └── products/              # 📷 Hình ảnh sản phẩm
-│   ├── invoices/                  # 📄 Hóa đơn PDF/Excel
-│   └── temp/                      # 🗂️ File tạm thời
-│
-├── database/
-│   ├── models.py                  # SQLAlchemy models
-│   └── db_manager.py              # Database manager
-│
-├── services/
-│   ├── ocr_service.py             # Google Vision OCR
-│   ├── image_search.py            # Image-based search
-│   ├── product_service.py         # Product CRUD
-│   ├── customer_service.py        # Customer management
-│   └── invoice_service.py         # Invoice generation
-│
-├── ui/
-│   └── app.py                     # Old CustomTkinter (deprecated)
-│
-├── utils/
-│   └── helpers.py                 # Utility functions
-│
-├── streamlit_app.py               # Main Streamlit app ⭐
-├── config.py                      # Configuration
-├── main.py                        # Entry point
-├── requirements.txt               # Dependencies
-└── README.md                      # This file
+├── backend/                 # FastAPI REST API và toàn bộ logic backend
+│   ├── api/                 # Routes FastAPI (products, customers, invoices, import, search)
+│   ├── schemas/             # Pydantic models
+│   ├── database/            # SQLAlchemy models + session
+│   ├── services/            # Product/Customer/Invoice/OCR/ImageSearch services
+│   ├── data/                # SQLite DB + assets (auto tạo)
+│   ├── config.py            # Đọc .env, khai báo đường dẫn
+│   ├── main.py              # Entry FastAPI
+│   └── requirements.txt
+├── react-frontend/          # React SPA (Vite)
+│   ├── src/                 # Components, pages, hooks, services
+│   ├── package.json
+│   └── vite.config.ts
+├── .env.example             # Biến môi trường backend mẫu
+├── requirements.txt         # Legacy root (không còn dùng)
+├── LICENSE
+└── README.md
 ```
 
-## 🚀 Cài đặt & Chạy
-
-### 🐧 UBUNTU / DEBIAN / LINUX
-
-#### Bước 1: Clone Repository
-
-```bash
-git clone <repository-url>
-cd Store-Management
-```
-
-#### Bước 2: Tạo Python Virtual Environment
-
-```bash
-# Cách 1: Dùng venv (khuyến nghị)
-python3 -m venv venv
-source venv/bin/activate
-
-# Cách 2: Dùng conda
-conda create -n store python=3.11
-conda activate store
-```
-
-#### Bước 3: Cài đặt Dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-**Nếu gặp lỗi phụ thuộc, cài thêm:**
-```bash
-sudo apt-get update
-sudo apt-get install python3-tk libgl1-mesa-glx
-```
-
-#### Bước 4: Cấu hình Google Cloud Vision API (Optional)
-
-Nếu muốn dùng OCR & Image Search:
-
-1. Truy cập [Google Cloud Console](https://console.cloud.google.com/)
-2. Tạo project mới → Bật **Cloud Vision API**
-3. Tạo **Service Account** → Tải **JSON credentials**
-4. Copy file credentials vào thư mục project
-
-#### Bước 5: Cấu hình môi trường
-
-```bash
-# Copy file mẫu
-cp .env.example .env
-
-# Chỉnh sửa (nếu cần)
-nano .env
-# Sửa: GOOGLE_CREDENTIALS_PATH=path/to/credentials.json
-```
-
-#### Bước 6: Chạy Ứng Dụng
-
-**Cách 1: Chạy Streamlit trực tiếp (Khuyến nghị)**
-```bash
-streamlit run streamlit_app.py
-```
-
-**Cách 2: Chạy qua main.py**
-```bash
-python main.py
-```
-
-**Kết quả:** App mở ở `http://localhost:8501` tự động
-
-#### Ubuntu Tips:
-```bash
-# Chạy nền (background)
-streamlit run streamlit_app.py &
-
-# Xem logs
-streamlit run streamlit_app.py 2>&1 | tee app.log
-
-# Thay đổi port
-streamlit run streamlit_app.py --server.port 8502
-```
-
----
-
-### 🪟 WINDOWS 10/11
-
-#### Bước 1: Clone Repository
-
-```cmd
-git clone <repository-url>
-cd Store-Management
-```
-
-#### Bước 2: Tạo Python Virtual Environment
-
-```cmd
-REM Cách 1: Dùng venv
-python -m venv venv
-venv\Scripts\activate
-
-REM Cách 2: Dùng conda
-conda create -n store python=3.11
-conda activate store
-```
-
-#### Bước 3: Cài đặt Dependencies
-
-```cmd
-pip install -r requirements.txt
-```
-
-#### Bước 4: Cấu hình Google Cloud Vision API (Optional)
-
-1. Truy cập [Google Cloud Console](https://console.cloud.google.com/)
-2. Tạo project → Bật **Cloud Vision API**
-3. Service Account → Tải **credentials.json**
-4. Lưu file vào thư mục project
-
-#### Bước 5: Cấu hình môi trường
-
-```cmd
-REM Copy file cấu hình
-copy .env.example .env
-
-REM Chỉnh sửa (nếu cần) - dùng Notepad hoặc VS Code
-notepad .env
-```
-
-Trong file `.env`:
-```env
-COMPANY_NAME=Cửa Hàng Của Bạn
-GOOGLE_CREDENTIALS_PATH=path\to\credentials.json
-```
-
-#### Bước 6: Chạy Ứng Dụng
-
-**Cách 1: Chạy Streamlit trực tiếp (Khuyến nghị)**
-```cmd
-streamlit run streamlit_app.py
-```
-
-**Cách 2: Chạy qua main.py**
-```cmd
-python main.py
-```
-
-**Kết quả:** Browser mở tự động ở `http://localhost:8501`
-
-#### Windows Tips:
-```cmd
-REM Chạy với port khác
-streamlit run streamlit_app.py --server.port 8502
-
-REM Tắt cache nếu có lỗi
-streamlit run streamlit_app.py --logger.level=debug
-
-REM Tạo Shortcut trên Desktop
-REM Chuột phải → New → Shortcut
-REM Target: C:\path\to\python -m streamlit run C:\path\to\streamlit_app.py
-```
-
----
-
-## 📖 Hướng dẫn sử dụng
-
-### 🌓 Đổi giao diện (Light/Dark Mode)
-
-1. Nhấp icon **☰** (menu) ở **góc trên phải**
-2. Chọn **Settings**
-3. Chọn **Theme** → **Light** hoặc **Dark**
-
-App sẽ tự động cập nhật!
-
----
-
-### Trang Chủ
-- Xem thống kê nhanh (sản phẩm, khách hàng, hóa đơn, doanh thu)
-- Xem hóa đơn gần đây
-- Các nút hành động nhanh
-
-### Quản Lý Sản Phẩm
-1. Click **Sản phẩm** ở sidebar
-2. Tìm kiếm sản phẩm hoặc xem danh sách
-3. Thêm mới bằng nút **➕ Thêm mới**
-4. Chỉnh sửa/xóa từng sản phẩm
-
-### Nhập Báo Giá
-1. Click **Nhập báo giá**
-2. Chọn file (ảnh/PDF/Excel/CSV)
-3. Click **Bắt đầu nhập**
-4. Hệ thống tự động:
-   - Đọc và phân tích file
-   - Cập nhật sản phẩm cũ
-   - Thêm sản phẩm mới
-
-### Tìm Kiếm AI
-- **Text Search**: Gõ tên sản phẩm
-- **Image Search**: Upload ảnh sản phẩm (cần Google API)
-
-### Quản Lý Hóa Đơn
-1. Click **Hóa đơn**
-2. Lọc theo trạng thái
-3. Xuất PDF, Excel, hoặc in
-
-### Quản Lý Khách Hàng
-1. Click **Khách hàng**
-2. Tìm kiếm hoặc xem danh sách
-3. Thêm khách hàng mới
-4. Xem lịch sử mua hàng
-
-### Thống Kê
-1. Click **Thống kê**
-2. Xem tổng quan (sản phẩm, khách, hóa đơn, doanh thu)
-3. Biểu đồ thanh toán
-4. Click **Cập nhật thống kê** để làm mới
-
----
-
-## 🔧 Troubleshooting
-
-### Lỗi Chung (Windows & Linux)
-
-#### "ModuleNotFoundError: No module named..."
-```bash
-# Cài lại dependencies
-pip install -r requirements.txt --upgrade
-```
-
-#### Port 8501 đang được sử dụng
-```bash
-# Dùng port khác
-streamlit run streamlit_app.py --server.port 8502
-```
-
-#### Database không được tạo
-Database sẽ tự động tạo lần đầu chạy app ở:
-- **Windows**: `Store-Management\data\store_management.db`
-- **Linux**: `~/Store-Management/data/store_management.db`
-
----
-
-### 🐧 UBUNTU / LINUX Troubleshooting
-
-#### "command not found: python3"
-```bash
-sudo apt-get install python3 python3-pip
-```
-
-#### "No module named 'tkinter'"
-```bash
-sudo apt-get install python3-tk
-```
-
-#### "libGL.so.1: cannot open shared object"
-```bash
-sudo apt-get install libgl1-mesa-glx
-```
-
-#### Tiếng Việt bị hỏng trên terminal
-- Ứng dụng chạy trên web browser nên không ảnh hưởng
-- Nếu cần, đảm bảo locale UTF-8: `locale -a | grep utf`
-
-#### Streamlit không mở browser tự động
-- Truy cập thủ công: `http://localhost:8501`
-
----
-
-### 🪟 WINDOWS Troubleshooting
-
-#### "python is not recognized"
-- Thêm Python vào PATH:
-  1. Settings → System → About → Advanced system settings
-  2. Environment Variables → Path → Edit → Thêm Python folder
-  3. Khởi động lại Command Prompt
-
-#### "pip is not recognized"
-```cmd
-python -m pip install -r requirements.txt
-```
-
-#### Tiếng Việt bị hỏng
-- Streamlit chạy trên web nên không ảnh hưởng
-- Nếu cần, kiểm tra: Settings → Time & Language → Language
-
-#### Permission Denied khi cài đặt
-```cmd
-REM Chạy Command Prompt as Administrator
-pip install -r requirements.txt
-```
-
-#### Browser không mở tự động
-- Mở thủ công: `http://localhost:8501`
-
----
-
-## 🔐 Bảo mật
-
-- ✅ Database lưu local (SQLite)
-- ✅ Không lưu dữ liệu trên cloud
-- ✅ Credentials trong file .env (git ignored)
-- ⚠️ **Khuyến nghị**: Backup folder `data/` định kỳ
-
-## 📦 Backup & Restore
-
-### Backup toàn bộ dữ liệu:
-```bash
-# Linux/macOS
-cp -r data/ data_backup_$(date +%Y%m%d)
-
-# Windows
-xcopy data\ data_backup_%DATE:~10,4%%DATE:~4,2%%DATE:~7,2%\ /E
-```
-
-### Restore từ backup:
-```bash
-# Linux/macOS
-cp -r data_backup_20240103/* data/
-
-# Windows
-xcopy data_backup_20240103\* data\ /E
-```
-
----
-
-## 🔄 Update & Upgrade
-
-### Cập nhật code
-```bash
-git pull origin main
-```
-
-### Cập nhật dependencies
-```bash
-pip install -r requirements.txt --upgrade
-```
-
-### Database sẽ tự động migrate (nếu cần)
-
----
-
-## 🤝 Đóng góp
-
-Mọi đóng góp đều được chào đón!
-
-1. Fork repository
-2. Tạo branch mới (`git checkout -b feature/AmazingFeature`)
-3. Commit changes (`git commit -m 'Add AmazingFeature'`)
-4. Push to branch (`git push origin feature/AmazingFeature`)
-5. Tạo Pull Request
-
----
+## 🖥️ Yêu cầu hệ thống
+- Python 3.11+ (khuyến nghị dùng venv) • pip
+- Node.js 18+ và npm
+- Google Cloud Vision credentials (tùy chọn cho OCR / tìm kiếm ảnh)
+
+## ⚡ Thiết lập nhanh (Dev)
+1. **Clone** repo và tạo file môi trường:
+   ```bash
+   git clone <repository-url>
+   cd Store-Management
+   cp .env.example .env   # backend đọc file này
+   ```
+2. **Backend (FastAPI)**  
+   ```bash
+   cd backend
+   python -m venv .venv
+   source .venv/bin/activate          # Windows: .venv\Scripts\activate
+   pip install -r requirements.txt
+   uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+   # Docs: http://localhost:8000/docs
+   ```
+   - Database tự tạo tại `backend/data/store_management.db`.
+3. **Frontend (React)**  
+   ```bash
+   cd react-frontend
+   npm install
+   # (tùy chọn) echo "VITE_API_BASE_URL=http://localhost:8000" > .env
+   npm run dev  # http://localhost:5173
+   ```
+
+## 🔧 Cấu hình môi trường
+- File `.env` (đọc bởi `backend/config.py`):
+  ```env
+  COMPANY_NAME=Cửa Hàng Gia Đình
+  DATABASE_PATH=backend/data/store_management.db
+  GOOGLE_CREDENTIALS_PATH=path/to/credentials.json   # để trống nếu không dùng Vision
+  IMAGE_DIR=backend/data/images/products
+  INVOICE_DIR=backend/data/invoices
+  TEMP_DIR=backend/data/temp
+  DEFAULT_TAX_RATE=0
+  DEFAULT_DISCOUNT=0
+  IMAGE_SEARCH_TOP_K=5
+  IMAGE_SEARCH_THRESHOLD=0.3
+  ```
+- Frontend: đặt `VITE_API_BASE_URL` nếu backend không chạy ở `http://localhost:8000`.
+
+## 🌐 API chính
+- `GET /api/products`, `GET /api/products/search?q=...`, `POST /api/products`, `PUT/DELETE /api/products/{id}`
+- `GET /api/customers`, `GET /api/customers/search`, `POST/DELETE /api/customers`, `GET /api/customers/{id}/stats`
+- `GET /api/invoices` (lọc `status`), `GET /api/invoices/{id}`, `GET /api/invoices/{id}/pdf`, `GET /api/invoices/{id}/excel`, `GET /api/stats`
+- `POST /api/import/quotation` (multipart file: ảnh/PDF/Excel/CSV)
+- `POST /api/search/text`, `POST /api/search/image`
+
+## 🧭 Hướng dẫn sử dụng UI
+- **Trang chủ**: chỉ số nhanh (sản phẩm/khách/hóa đơn/doanh thu), 5 hóa đơn gần nhất, hành động nhanh.
+- **Sản phẩm**: tìm kiếm, thêm/sửa/xóa, xem giá và danh mục.
+- **Nhập báo giá**: tải file báo giá; hệ thống trả về số bản ghi cập nhật/thêm mới và lỗi (nếu có).
+- **Tìm kiếm AI**: tìm text hoặc upload ảnh để tìm sản phẩm tương tự (cần Vision cho tìm ảnh).
+- **Hóa đơn**: lọc theo trạng thái, tải PDF/Excel từng hóa đơn.
+- **Khách hàng**: thêm khách mới, xem thông tin liên hệ, thống kê số đơn và chi tiêu.
+- **Thống kê**: tổng doanh thu, số hóa đơn, tỷ lệ thanh toán, doanh thu chờ xử lý, AOV.
+
+## 💾 Dữ liệu & Backup
+- Database và file nằm trong `backend/data/`. Thư mục được tự tạo.
+- Backup nhanh (Linux/macOS):
+  ```bash
+  cp backend/data/store_management.db backend/data/store_management_backup_$(date +%Y%m%d).db
+  ```
+- Nếu không cấu hình Google Vision: import Excel/CSV hoạt động bình thường; import ảnh/PDF và tìm kiếm hình ảnh sẽ tắt.
 
 ## 📝 License
-
-MIT License - Xem file [LICENSE](LICENSE) để biết thêm chi tiết.
-
----
-
-## ⭐ Hỗ trợ
-
-Nếu ứng dụng hữu ích, hãy cho một ⭐ nhé!
-
----
-
-**Made with ❤️ for small businesses in Vietnam**
-
-**Cập nhật lần cuối**: 2025
+MIT License – xem `LICENSE`.

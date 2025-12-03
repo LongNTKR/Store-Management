@@ -159,7 +159,9 @@ class InvoiceService:
         start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None
     ) -> List[Invoice]:
-        """Search invoices with filters."""
+        """Search invoices with filters. Uses joinedload to prevent N+1 queries."""
+        from sqlalchemy.orm import joinedload
+
         filters = []
 
         if customer_id:
@@ -175,6 +177,10 @@ class InvoiceService:
             filters.append(Invoice.created_at <= end_date)
 
         query = self.db.query(Invoice)
+
+        # Eagerly load invoice items to prevent N+1 queries
+        query = query.options(joinedload(Invoice.items))
+
         if filters:
             query = query.filter(and_(*filters))
 
@@ -436,7 +442,7 @@ class InvoiceService:
         end_date: Optional[datetime] = None
     ) -> Dict:
         """
-        Get invoice statistics.
+        Get invoice statistics using SQL aggregation for performance.
 
         Args:
             start_date: Start date filter
@@ -445,6 +451,8 @@ class InvoiceService:
         Returns:
             Dictionary with statistics
         """
+        from sqlalchemy import func, case
+
         filters = []
         if start_date:
             filters.append(Invoice.created_at >= start_date)
@@ -455,21 +463,38 @@ class InvoiceService:
         if filters:
             query = query.filter(and_(*filters))
 
-        invoices = query.all()
+        # Use SQL aggregation instead of Python loops for performance
+        results = query.with_entities(
+            func.count(Invoice.id).label('total_invoices'),
+            func.sum(case(
+                (Invoice.status == 'paid', Invoice.total),
+                else_=0
+            )).label('total_revenue'),
+            func.sum(case(
+                (Invoice.status == 'pending', Invoice.total),
+                else_=0
+            )).label('pending_revenue'),
+            func.count(case(
+                (Invoice.status == 'paid', 1)
+            )).label('paid_invoices'),
+            func.count(case(
+                (Invoice.status == 'pending', 1)
+            )).label('pending_invoices'),
+            func.count(case(
+                (Invoice.status == 'cancelled', 1)
+            )).label('cancelled_invoices'),
+        ).first()
 
-        total_invoices = len(invoices)
-        paid_invoices = len([inv for inv in invoices if inv.status == 'paid'])
-        pending_invoices = len([inv for inv in invoices if inv.status == 'pending'])
-        cancelled_invoices = len([inv for inv in invoices if inv.status == 'cancelled'])
-
-        total_revenue = sum(inv.total for inv in invoices if inv.status == 'paid')
-        pending_revenue = sum(inv.total for inv in invoices if inv.status == 'pending')
+        total_invoices = results.total_invoices or 0
+        paid_invoices = results.paid_invoices or 0
+        total_revenue = float(results.total_revenue or 0)
+        pending_revenue = float(results.pending_revenue or 0)
 
         return {
             'total_invoices': total_invoices,
             'paid_invoices': paid_invoices,
-            'pending_invoices': pending_invoices,
-            'cancelled_invoices': cancelled_invoices,
+            'pending_invoices': results.pending_invoices or 0,
+            'cancelled_invoices': results.cancelled_invoices or 0,
             'total_revenue': total_revenue,
             'pending_revenue': pending_revenue,
             'average_order_value': total_revenue / paid_invoices if paid_invoices > 0 else 0
