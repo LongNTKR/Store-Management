@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../services/api'
+import { productService } from '@/services/products'
 import type { Product } from '../types'
 
 /**
@@ -49,6 +50,32 @@ export function usePermanentlyDeleteProduct() {
         },
         onSuccess: () => {
             // Invalidate trash and products queries
+            queryClient.invalidateQueries({ queryKey: ['trash'] })
+            queryClient.invalidateQueries({ queryKey: ['products'] })
+            queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+        },
+    })
+}
+
+export function useBulkPermanentlyDeleteProducts() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: (ids: number[]) => productService.bulkPermanentDelete(ids),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['trash'] })
+            queryClient.invalidateQueries({ queryKey: ['products'] })
+            queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+        },
+    })
+}
+
+export function useBulkRestoreProducts() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: (ids: number[]) => productService.bulkRestore(ids),
+        onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['trash'] })
             queryClient.invalidateQueries({ queryKey: ['products'] })
             queryClient.invalidateQueries({ queryKey: ['dashboard'] })

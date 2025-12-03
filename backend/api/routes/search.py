@@ -25,7 +25,7 @@ class ImageSearchResult(BaseModel):
 @router.post("/search/text", response_model=List[Product])
 async def search_text(request: TextSearchRequest, db: Session = Depends(get_db)):
     """Search products by text"""
-    product_service = ProductService(db, Config.IMAGE_DIR)
+    product_service = ProductService(db, Config.IMAGE_DIR, Config.MAX_PRODUCT_IMAGES)
     products = product_service.search_products(query=request.query)
     return products
 
@@ -38,7 +38,7 @@ async def search_image(
     """Search products by image similarity"""
     try:
         # Initialize services
-        product_service = ProductService(db, Config.IMAGE_DIR)
+        product_service = ProductService(db, Config.IMAGE_DIR, Config.MAX_PRODUCT_IMAGES)
         
         try:
             image_search_service = ImageSearchService(

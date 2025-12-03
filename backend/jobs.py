@@ -19,7 +19,7 @@ def cleanup_old_deletions():
         db_manager = DatabaseManager(Config.DATABASE_PATH)
         session = db_manager.get_session()
 
-        product_service = ProductService(session, Config.IMAGE_DIR)
+        product_service = ProductService(session, Config.IMAGE_DIR, Config.MAX_PRODUCT_IMAGES)
         count = product_service.cleanup_old_deletions(days_old=30)
 
         if count > 0:

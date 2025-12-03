@@ -25,7 +25,7 @@ async def get_dashboard_data(db: Session = Depends(get_db)):
     Returns unified response to eliminate waterfall requests.
     """
     # Initialize services
-    product_service = ProductService(db, Config.IMAGE_DIR)
+    product_service = ProductService(db, Config.IMAGE_DIR, Config.MAX_PRODUCT_IMAGES)
     customer_service = CustomerService(db)
     invoice_service = InvoiceService(db, Config.INVOICE_DIR)
 

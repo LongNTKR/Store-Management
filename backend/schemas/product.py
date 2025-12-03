@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 
 
@@ -29,6 +29,7 @@ class ProductUpdate(BaseModel):
 
 class Product(ProductBase):
     id: int
+    images: List[str] = []
     image_paths: Optional[str] = None
     created_at: datetime
     updated_at: datetime
@@ -37,3 +38,11 @@ class Product(ProductBase):
 
     class Config:
         from_attributes = True
+
+
+class ProductImageDeleteRequest(BaseModel):
+    path: str = Field(..., description="Stored image filename to remove")
+
+
+class ProductBulkActionRequest(BaseModel):
+    ids: List[int] = Field(..., min_length=1, description="List of product IDs to apply the action to")

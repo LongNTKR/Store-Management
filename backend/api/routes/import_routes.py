@@ -20,7 +20,7 @@ async def import_quotation(
 
     try:
         # Initialize services
-        product_service = ProductService(db, Config.IMAGE_DIR)
+        product_service = ProductService(db, Config.IMAGE_DIR, Config.MAX_PRODUCT_IMAGES)
 
         try:
             ocr_service = OCRService(Config.GOOGLE_CREDENTIALS_PATH if Config.GOOGLE_CREDENTIALS_PATH else None)

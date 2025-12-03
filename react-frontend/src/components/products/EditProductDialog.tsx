@@ -1,6 +1,8 @@
+import { useEffect, useState, type ChangeEvent } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
+import { useQueryClient } from '@tanstack/react-query'
 import {
     Dialog,
     DialogContent,
@@ -14,6 +16,10 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { useUpdateProduct } from '@/hooks/useProducts'
 import type { Product } from '@/types'
+import { productService } from '@/services/products'
+import { toast } from 'sonner'
+import { getProductImageUrl } from '@/lib/utils'
+import { MAX_PRODUCT_IMAGES } from '@/constants/products'
 
 const productSchema = z.object({
     name: z.string().min(1, 'Vui lòng nhập tên sản phẩm'),
@@ -38,6 +44,12 @@ interface EditProductDialogProps {
 
 export function EditProductDialog({ product, open, onOpenChange }: EditProductDialogProps) {
     const updateProduct = useUpdateProduct()
+    const queryClient = useQueryClient()
+    const [existingImages, setExistingImages] = useState<string[]>(product.images || [])
+    const [newImages, setNewImages] = useState<File[]>([])
+    const [newPreviewUrls, setNewPreviewUrls] = useState<string[]>([])
+    const [isImageUploading, setIsImageUploading] = useState(false)
+    const [removingImage, setRemovingImage] = useState<string | null>(null)
 
     const {
         register,
@@ -55,8 +67,83 @@ export function EditProductDialog({ product, open, onOpenChange }: EditProductDi
         },
     })
 
+    useEffect(() => {
+        setExistingImages(product.images || [])
+    }, [product])
+
+    useEffect(() => {
+        const urls = newImages.map((file) => URL.createObjectURL(file))
+        setNewPreviewUrls(urls)
+
+        return () => {
+            urls.forEach((url) => URL.revokeObjectURL(url))
+        }
+    }, [newImages])
+
+    useEffect(() => {
+        if (!open) {
+            setNewImages([])
+            setNewPreviewUrls([])
+            setRemovingImage(null)
+        }
+    }, [open])
+
+    const handleExistingImageDelete = async (path: string) => {
+        try {
+            setRemovingImage(path)
+            await productService.deleteImage(product.id, path)
+            setExistingImages((prev) => prev.filter((img) => img !== path))
+            await queryClient.invalidateQueries({ queryKey: ['products'] })
+            toast.success('Đã xóa ảnh khỏi sản phẩm.')
+        } catch (error) {
+            console.error('Failed to delete product image:', error)
+            toast.error('Không thể xóa ảnh, vui lòng thử lại.')
+        } finally {
+            setRemovingImage(null)
+        }
+    }
+
+    const handleNewImagesSelection = (event: ChangeEvent<HTMLInputElement>) => {
+        const files = event.target.files
+        if (!files) return
+
+        const incoming = Array.from(files).filter((file) => {
+            if (!file.type.startsWith('image/')) {
+                toast.error(`Tệp "${file.name}" không phải hình ảnh hợp lệ.`)
+                return false
+            }
+            return true
+        })
+
+        setNewImages((prev) => {
+            const remainingSlots = Math.max(0, MAX_PRODUCT_IMAGES - (existingImages.length + prev.length))
+
+            if (remainingSlots === 0) {
+                toast.error(`Đã đạt giới hạn ${MAX_PRODUCT_IMAGES} ảnh cho sản phẩm này.`)
+                return prev
+            }
+
+            if (incoming.length > remainingSlots) {
+                toast.error(`Bạn chỉ có thể thêm ${remainingSlots} ảnh nữa.`)
+            }
+
+            const filesToAdd = incoming.slice(0, remainingSlots)
+            return [...prev, ...filesToAdd]
+        })
+
+        event.target.value = ''
+    }
+
+    const handleRemoveNewImage = (index: number) => {
+        setNewImages((prev) => prev.filter((_, idx) => idx !== index))
+    }
+
     const onSubmit = async (data: ProductFormData) => {
         try {
+            if (newImages.length > 0) {
+                setIsImageUploading(true)
+            }
+
             await updateProduct.mutateAsync({
                 id: product.id,
                 product: {
@@ -64,9 +151,20 @@ export function EditProductDialog({ product, open, onOpenChange }: EditProductDi
                     import_price: (data.import_price && !isNaN(data.import_price)) ? data.import_price : undefined,
                 },
             })
+
+            if (newImages.length > 0) {
+                await productService.uploadImages(product.id, newImages)
+            }
+
+            await queryClient.invalidateQueries({ queryKey: ['products'] })
+            toast.success('Đã cập nhật sản phẩm.')
+            setNewImages([])
             onOpenChange(false)
         } catch (error) {
             console.error('Failed to update product:', error)
+            toast.error('Không thể cập nhật sản phẩm.')
+        } finally {
+            setIsImageUploading(false)
         }
     }
 
@@ -144,11 +242,74 @@ export function EditProductDialog({ product, open, onOpenChange }: EditProductDi
                         />
                     </div>
 
+                    <div className="space-y-2">
+                        <Label>Hình ảnh hiện tại</Label>
+                        {existingImages.length === 0 ? (
+                            <p className="text-sm text-muted-foreground">Chưa có ảnh nào cho sản phẩm này.</p>
+                        ) : (
+                            <div className="grid grid-cols-3 gap-2">
+                                {existingImages.map((image) => (
+                                    <div key={image} className="relative rounded border p-1">
+                                        <img
+                                            src={getProductImageUrl(image)}
+                                            alt="Ảnh sản phẩm"
+                                            className="h-20 w-full rounded object-cover"
+                                        />
+                                        <Button
+                                            type="button"
+                                            size="icon"
+                                            variant="outline"
+                                            className="absolute right-1 top-1 h-6 w-6 rounded-full bg-white/90 text-xs text-destructive"
+                                            onClick={() => handleExistingImageDelete(image)}
+                                            disabled={removingImage === image || updateProduct.isPending}
+                                        >
+                                            {removingImage === image ? '…' : '✕'}
+                                        </Button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                        <p className="text-xs text-muted-foreground">
+                            Tối đa {MAX_PRODUCT_IMAGES} ảnh/sản phẩm. Bạn có thể xóa ảnh cũ trước khi thêm ảnh mới.
+                        </p>
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label htmlFor="new-images">Thêm ảnh mới</Label>
+                        <Input
+                            id="new-images"
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            onChange={handleNewImagesSelection}
+                        />
+                        {newPreviewUrls.length > 0 && (
+                            <div className="grid grid-cols-3 gap-2 pt-2">
+                                {newPreviewUrls.map((url, index) => (
+                                    <div key={url} className="relative rounded border p-1">
+                                        <img
+                                            src={url}
+                                            alt={`Ảnh mới ${index + 1}`}
+                                            className="h-20 w-full rounded object-cover"
+                                        />
+                                        <button
+                                            type="button"
+                                            className="absolute right-1 top-1 rounded bg-white/80 px-1 text-xs text-destructive"
+                                            onClick={() => handleRemoveNewImage(index)}
+                                        >
+                                            ✕
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
                     <DialogFooter className="gap-2">
                         <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                             ❌ Hủy
                         </Button>
-                        <Button type="submit" disabled={updateProduct.isPending}>
+                        <Button type="submit" disabled={updateProduct.isPending || isImageUploading}>
                             💾 Lưu thay đổi
                         </Button>
                     </DialogFooter>

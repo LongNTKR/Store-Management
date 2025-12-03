@@ -1,5 +1,6 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
+import { API_BASE_URL } from '@/services/api'
 
 export function cn(...inputs: ClassValue[]) {
     return twMerge(clsx(inputs))
@@ -26,4 +27,23 @@ export function formatDate(date: string | Date, format: string = 'dd/MM/yyyy'): 
     }
 
     return `${day}/${month}/${year}`
+}
+
+export function getProductImageUrl(path?: string): string {
+    if (!path) {
+        return ''
+    }
+
+    const trimmedBase = API_BASE_URL.replace(/\/$/, '')
+    const normalizedPath = path.replace(/^\/+/, '')
+
+    if (normalizedPath.startsWith('http://') || normalizedPath.startsWith('https://')) {
+        return normalizedPath
+    }
+
+    if (normalizedPath.startsWith('images/products')) {
+        return `${trimmedBase}/${normalizedPath}`
+    }
+
+    return `${trimmedBase}/images/products/${normalizedPath}`
 }

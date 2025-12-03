@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from typing import List
+from config import Config
 from sqlalchemy import (
     Column, Integer, String, Float, DateTime, ForeignKey, Text, Boolean
 )
@@ -51,7 +52,22 @@ class Product(Base):
     @images.setter
     def images(self, image_list: List[str]):
         """Set images from list."""
-        self.image_paths = ','.join(image_list) if image_list else None
+        if not image_list:
+            self.image_paths = None
+            return
+
+        cleaned_images = []
+        for path in image_list:
+            if not path:
+                continue
+            cleaned = path.strip()
+            if cleaned:
+                cleaned_images.append(cleaned)
+
+        if len(cleaned_images) > Config.MAX_PRODUCT_IMAGES:
+            raise ValueError(f"Each product can have at most {Config.MAX_PRODUCT_IMAGES} images.")
+
+        self.image_paths = ','.join(cleaned_images) if cleaned_images else None
 
 
 class Customer(Base):

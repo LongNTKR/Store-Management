@@ -54,3 +54,15 @@ export function useDeleteProduct() {
         },
     })
 }
+
+export function useBulkDeleteProducts() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: (ids: number[]) => productService.bulkDelete(ids),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['products'] })
+            queryClient.invalidateQueries({ queryKey: ['trash'] })
+        },
+    })
+}

@@ -7,7 +7,7 @@ export interface Product {
     category?: string
     unit: string
     stock_quantity: number
-    image_paths?: string
+    image_paths?: string | null
     created_at: string
     updated_at: string
     is_active: boolean

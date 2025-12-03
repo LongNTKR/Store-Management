@@ -1,7 +1,8 @@
 """Product management service."""
 
+import logging
 import os
-import shutil
+import uuid
 from typing import List, Optional, Dict, Tuple
 from datetime import datetime
 from sqlalchemy.orm import Session
@@ -11,10 +12,13 @@ from database.models import Product, PriceHistory
 from services.ocr_service import OCRService
 
 
+logger = logging.getLogger(__name__)
+
+
 class ProductService:
     """Service for product management operations."""
 
-    def __init__(self, db_session: Session, image_dir: str = "data/images/products"):
+    def __init__(self, db_session: Session, image_dir: str = "data/images/products", max_images: int = 5):
         """
         Initialize product service.
 
@@ -23,8 +27,10 @@ class ProductService:
             image_dir: Directory to store product images
         """
         self.db = db_session
-        self.image_dir = image_dir
-        os.makedirs(image_dir, exist_ok=True)
+        self.image_dir = os.path.abspath(image_dir)
+        self.max_images = max_images
+        self.allowed_extensions = {'.jpg', '.jpeg', '.png', '.gif', '.webp'}
+        os.makedirs(self.image_dir, exist_ok=True)
 
     def create_product(
         self,
@@ -64,7 +70,8 @@ class ProductService:
         )
 
         if image_paths:
-            product.images = image_paths
+            sanitized_images = self._sanitize_image_references(image_paths)
+            product.images = sanitized_images
 
         self.db.add(product)
         self.db.commit()
@@ -210,7 +217,8 @@ class ProductService:
             product.stock_quantity = stock_quantity
 
         if image_paths is not None:
-            product.images = image_paths
+            sanitized_images = self._sanitize_image_references(image_paths)
+            product.images = sanitized_images
 
         product.updated_at = datetime.utcnow()
 
@@ -241,6 +249,34 @@ class ProductService:
         self.db.commit()
         return True
 
+    def delete_products(self, product_ids: List[int]) -> Dict[str, int]:
+        """
+        Bulk soft delete products.
+
+        Args:
+            product_ids: List of product IDs to delete
+
+        Returns:
+            Dict with requested count and number of products updated
+        """
+        unique_ids = list(dict.fromkeys(pid for pid in product_ids if isinstance(pid, int)))
+        if not unique_ids:
+            return {"requested": 0, "deleted": 0}
+
+        products = self.db.query(Product).filter(
+            Product.id.in_(unique_ids),
+            Product.is_active == True
+        ).all()
+
+        now = datetime.utcnow()
+        for product in products:
+            product.is_active = False
+            product.deleted_at = now
+            product.updated_at = now
+
+        self.db.commit()
+        return {"requested": len(unique_ids), "deleted": len(products)}
+
     def restore_product(self, product_id: int) -> Optional[Product]:
         """
         Restore a soft-deleted product.
@@ -264,6 +300,28 @@ class ProductService:
         self.db.refresh(product)
 
         return product
+
+    def restore_products(self, product_ids: List[int]) -> Dict[str, int]:
+        """Bulk restore soft-deleted products."""
+        unique_ids = list(dict.fromkeys(pid for pid in product_ids if isinstance(pid, int)))
+        if not unique_ids:
+            return {"requested": 0, "restored": 0}
+
+        products = self.db.query(Product).filter(
+            Product.id.in_(unique_ids),
+            Product.is_active == False,
+            Product.deleted_at.isnot(None)
+        ).all()
+
+        now = datetime.utcnow()
+        for product in products:
+            product.is_active = True
+            product.deleted_at = None
+            product.updated_at = now
+
+        self.db.commit()
+
+        return {"requested": len(unique_ids), "restored": len(products)}
 
     def get_deleted_products(self) -> List[Product]:
         """
@@ -303,6 +361,7 @@ class ProductService:
 
         # Permanently delete them
         for product in old_deletions:
+            self._delete_product_images(product)
             self.db.delete(product)
 
         self.db.commit()
@@ -325,9 +384,88 @@ class ProductService:
         if not product:
             return False
 
+        self._delete_product_images(product)
         self.db.delete(product)
         self.db.commit()
         return True
+
+    def permanently_delete_products(self, product_ids: List[int]) -> Dict[str, int]:
+        """
+        Permanently delete multiple products from database.
+
+        Args:
+            product_ids: List of product IDs
+
+        Returns:
+            Dict with requested count and deleted count
+        """
+        unique_ids = list(dict.fromkeys(pid for pid in product_ids if isinstance(pid, int)))
+        if not unique_ids:
+            return {"requested": 0, "deleted": 0}
+
+        products = self.db.query(Product).filter(Product.id.in_(unique_ids)).all()
+
+        for product in products:
+            self._delete_product_images(product)
+            self.db.delete(product)
+
+        self.db.commit()
+        return {"requested": len(unique_ids), "deleted": len(products)}
+
+    def _sanitize_image_references(self, image_paths: List[str]) -> List[str]:
+        """
+        Normalize a list of image paths while enforcing the maximum limit.
+        """
+        cleaned: List[str] = []
+        for path in image_paths:
+            if not path:
+                continue
+            normalized = self._normalize_stored_path(path)
+            if normalized and normalized not in cleaned:
+                cleaned.append(normalized)
+
+        if len(cleaned) > self.max_images:
+            raise ValueError(f"Each product can have at most {self.max_images} images.")
+
+        return cleaned
+
+    def _normalize_stored_path(self, path: Optional[str]) -> str:
+        """Return a normalized filename for comparison/storage."""
+        if not path:
+            return ""
+        candidate = path.strip()
+        if not candidate:
+            return ""
+        return os.path.basename(candidate)
+
+    def _resolve_absolute_path(self, stored_path: str) -> str:
+        """Convert stored image reference into an absolute filesystem path."""
+        if os.path.isabs(stored_path):
+            return stored_path
+        return os.path.join(self.image_dir, stored_path)
+
+    def _delete_product_images(self, product: Product) -> None:
+        """Remove all stored image files for a product before permanent deletion."""
+        for image_ref in list(product.images):
+            absolute_path = self._resolve_absolute_path(image_ref)
+            if os.path.exists(absolute_path):
+                try:
+                    os.remove(absolute_path)
+                except OSError as exc:
+                    logger.warning("Failed to remove image %s for product %s: %s", image_ref, product.id, exc)
+
+    def _determine_extension(self, filename: Optional[str]) -> str:
+        """
+        Determine a safe file extension for an uploaded image.
+        Defaults to .jpg when extension is missing or not allowed.
+        """
+        if not filename:
+            return ".jpg"
+
+        ext = os.path.splitext(filename)[1].lower()
+        if ext in self.allowed_extensions:
+            return ext
+        return ".jpg"
 
     def _record_price_change(self, product: Product, new_price: float, reason: str = "Manual update"):
         """
@@ -521,39 +659,55 @@ class ProductService:
         except Exception as e:
             return 0, 0, [f"Error importing file: {str(e)}"]
 
-    def add_product_image(self, product_id: int, source_image_path: str) -> Optional[str]:
+    def add_product_image(
+        self,
+        product_id: int,
+        data: Optional[bytes] = None,
+        source_image_path: Optional[str] = None,
+        original_filename: Optional[str] = None
+    ) -> Optional[str]:
         """
         Add an image to a product.
 
         Args:
             product_id: Product ID
-            source_image_path: Path to source image file
+            data: Raw image bytes (preferred)
+            source_image_path: Optional path to copy from
+            original_filename: Filename used to determine extension
 
         Returns:
-            Path to saved image or None
+            Stored filename or None
         """
         product = self.get_product(product_id)
         if not product:
             return None
 
-        # Generate unique filename
-        ext = os.path.splitext(source_image_path)[1]
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"product_{product_id}_{timestamp}{ext}"
+        current_images = list(product.images)
+        if len(current_images) >= self.max_images:
+            raise ValueError(f"Each product can have at most {self.max_images} images.")
+
+        if data is None and source_image_path:
+            with open(source_image_path, "rb") as src:
+                data = src.read()
+
+        if data is None:
+            raise ValueError("No image data provided.")
+
+        ext = self._determine_extension(original_filename or source_image_path)
+        filename = f"product_{product_id}_{uuid.uuid4().hex}{ext}"
         dest_path = os.path.join(self.image_dir, filename)
 
-        # Copy image
-        shutil.copy2(source_image_path, dest_path)
+        with open(dest_path, "wb") as dest_file:
+            dest_file.write(data)
 
-        # Update product
-        current_images = product.images
-        current_images.append(dest_path)
-        product.images = current_images
+        current_images.append(filename)
+        product.images = self._sanitize_image_references(current_images)
         product.updated_at = datetime.utcnow()
 
         self.db.commit()
+        self.db.refresh(product)
 
-        return dest_path
+        return filename
 
     def remove_product_image(self, product_id: int, image_path: str) -> bool:
         """
@@ -570,20 +724,32 @@ class ProductService:
         if not product:
             return False
 
-        current_images = product.images
-        if image_path in current_images:
-            current_images.remove(image_path)
-            product.images = current_images
-            product.updated_at = datetime.utcnow()
+        target = self._normalize_stored_path(image_path)
+        if not target:
+            return False
 
-            # Delete physical file
-            if os.path.exists(image_path):
-                os.remove(image_path)
+        current_images = list(product.images)
+        matched = None
+        for stored in current_images:
+            if self._normalize_stored_path(stored) == target:
+                matched = stored
+                break
 
-            self.db.commit()
-            return True
+        if not matched:
+            return False
 
-        return False
+        current_images.remove(matched)
+        product.images = self._sanitize_image_references(current_images)
+        product.updated_at = datetime.utcnow()
+
+        absolute_path = self._resolve_absolute_path(matched)
+        if os.path.exists(absolute_path):
+            os.remove(absolute_path)
+
+        self.db.commit()
+        self.db.refresh(product)
+
+        return True
 
     def get_categories(self) -> List[str]:
         """

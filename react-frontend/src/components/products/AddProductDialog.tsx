@@ -1,6 +1,8 @@
+import { useEffect, useState, type ChangeEvent } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
+import { useQueryClient } from '@tanstack/react-query'
 import {
     Dialog,
     DialogContent,
@@ -13,6 +15,9 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { useCreateProduct } from '@/hooks/useProducts'
+import { productService } from '@/services/products'
+import { toast } from 'sonner'
+import { MAX_PRODUCT_IMAGES } from '@/constants/products'
 
 const productSchema = z.object({
     name: z.string().min(1, 'Vui lòng nhập tên sản phẩm'),
@@ -36,6 +41,10 @@ interface AddProductDialogProps {
 
 export function AddProductDialog({ open, onOpenChange }: AddProductDialogProps) {
     const createProduct = useCreateProduct()
+    const queryClient = useQueryClient()
+    const [selectedImages, setSelectedImages] = useState<File[]>([])
+    const [previewUrls, setPreviewUrls] = useState<string[]>([])
+    const [isSubmitting, setIsSubmitting] = useState(false)
 
     const {
         register,
@@ -49,18 +58,80 @@ export function AddProductDialog({ open, onOpenChange }: AddProductDialogProps) 
         },
     })
 
+    useEffect(() => {
+        const urls = selectedImages.map((file) => URL.createObjectURL(file))
+        setPreviewUrls(urls)
+
+        return () => {
+            urls.forEach((url) => URL.revokeObjectURL(url))
+        }
+    }, [selectedImages])
+
+    useEffect(() => {
+        if (!open) {
+            setSelectedImages([])
+            setPreviewUrls([])
+        }
+    }, [open])
+
+    const handleImageSelection = (event: ChangeEvent<HTMLInputElement>) => {
+        const files = event.target.files
+        if (!files) return
+
+        const incoming = Array.from(files).filter((file) => {
+            if (!file.type.startsWith('image/')) {
+                toast.error(`Tệp "${file.name}" không phải hình ảnh hợp lệ.`)
+                return false
+            }
+            return true
+        })
+
+        setSelectedImages((prev) => {
+            const availableSlots = Math.max(0, MAX_PRODUCT_IMAGES - prev.length)
+            if (availableSlots === 0) {
+                toast.error(`Mỗi sản phẩm chỉ được tối đa ${MAX_PRODUCT_IMAGES} ảnh.`)
+                return prev
+            }
+
+            if (incoming.length > availableSlots) {
+                toast.error(`Bạn chỉ có thể chọn thêm ${availableSlots} ảnh nữa.`)
+            }
+
+            const filesToAdd = incoming.slice(0, availableSlots)
+            return [...prev, ...filesToAdd]
+        })
+
+        event.target.value = ''
+    }
+
+    const handleRemoveImage = (index: number) => {
+        setSelectedImages((prev) => prev.filter((_, idx) => idx !== index))
+    }
+
     const onSubmit = async (data: ProductFormData) => {
         try {
-            await createProduct.mutateAsync({
+            setIsSubmitting(true)
+            const createdProduct = await createProduct.mutateAsync({
                 ...data,
                 import_price: (data.import_price && !isNaN(data.import_price)) ? data.import_price : undefined,
                 stock_quantity: 0,
                 is_active: true,
             })
+
+            if (selectedImages.length > 0) {
+                await productService.uploadImages(createdProduct.id, selectedImages)
+            }
+
+            await queryClient.invalidateQueries({ queryKey: ['products'] })
+            toast.success('✓ Đã thêm sản phẩm mới.')
             reset()
+            setSelectedImages([])
             onOpenChange(false)
         } catch (error) {
             console.error('Failed to create product:', error)
+            toast.error('Không thể tạo sản phẩm, vui lòng thử lại.')
+        } finally {
+            setIsSubmitting(false)
         }
     }
 
@@ -139,11 +210,42 @@ export function AddProductDialog({ open, onOpenChange }: AddProductDialogProps) 
                         />
                     </div>
 
+                    <div className="space-y-2">
+                        <Label htmlFor="images">Hình ảnh (tối đa {MAX_PRODUCT_IMAGES})</Label>
+                        <Input
+                            id="images"
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            onChange={handleImageSelection}
+                        />
+                        {previewUrls.length > 0 && (
+                            <div className="grid grid-cols-3 gap-2 pt-2">
+                                {previewUrls.map((url, index) => (
+                                    <div key={url} className="relative rounded border p-1">
+                                        <img
+                                            src={url}
+                                            alt={`Ảnh xem trước ${index + 1}`}
+                                            className="h-20 w-full rounded object-cover"
+                                        />
+                                        <button
+                                            type="button"
+                                            className="absolute right-1 top-1 rounded bg-white/80 px-1 text-xs text-destructive"
+                                            onClick={() => handleRemoveImage(index)}
+                                        >
+                                            ✕
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
                     <DialogFooter className="gap-2">
                         <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                             ❌ Hủy
                         </Button>
-                        <Button type="submit" disabled={createProduct.isPending}>
+                        <Button type="submit" disabled={createProduct.isPending || isSubmitting}>
                             💾 Lưu sản phẩm
                         </Button>
                     </DialogFooter>
