@@ -15,14 +15,17 @@ export function ProductsPage() {
     const [showAddDialog, setShowAddDialog] = useState(false)
     const [editingProduct, setEditingProduct] = useState<Product | null>(null)
 
-    const debouncedSearch = useDebounce(searchQuery, 300)
+    const debouncedSearch = useDebounce(searchQuery.trim(), 100)
 
     const { data: allProducts, isLoading: isLoadingAll } = useProducts()
-    const { data: searchResults, isLoading: isSearching } = useProductSearch(debouncedSearch)
+    const {
+        data: searchResults,
+        isLoading: isSearchLoading,
+    } = useProductSearch(debouncedSearch)
     const deleteProduct = useDeleteProduct()
 
     const products = debouncedSearch ? searchResults : allProducts
-    const isLoading = debouncedSearch ? isSearching : isLoadingAll
+    const isLoading = debouncedSearch ? (isSearchLoading && !searchResults) : isLoadingAll
 
     const handleDelete = async (id: number) => {
         if (confirm('Bạn có chắc chắn muốn xóa sản phẩm này?')) {

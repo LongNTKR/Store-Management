@@ -10,10 +10,13 @@ export function useProducts() {
 }
 
 export function useProductSearch(query: string) {
+    const trimmedQuery = query.trim()
+
     return useQuery({
-        queryKey: ['products', 'search', query],
-        queryFn: () => productService.search(query),
-        enabled: query.length > 0,
+        queryKey: ['products', 'search', trimmedQuery],
+        queryFn: () => productService.search(trimmedQuery),
+        enabled: trimmedQuery.length > 0,
+        placeholderData: (previousData) => previousData,
     })
 }
 

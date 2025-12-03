@@ -114,13 +114,14 @@ class ProductService:
         Returns:
             List of matching products
         """
+        query = query.strip() if query else query  # normalize whitespace to improve matching
         filters = [Product.is_active == is_active]
 
         if query:
             filters.append(
                 or_(
-                    Product.name.contains(query),
-                    Product.description.contains(query)
+                    Product.name.ilike(f"%{query}%"),
+                    Product.description.ilike(f"%{query}%")
                 )
             )
 

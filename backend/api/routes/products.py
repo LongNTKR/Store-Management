@@ -10,11 +10,11 @@ from config import Config
 router = APIRouter()
 
 
-@router.get("/products", response_model=List[Product])
-async def get_products(db: Session = Depends(get_db)):
-    """Get all products"""
+@router.get("/products/search", response_model=List[Product])
+async def search_products(q: str, db: Session = Depends(get_db)):
+    """Search products by query"""
     product_service = ProductService(db, Config.IMAGE_DIR)
-    products = product_service.get_all_products()
+    products = product_service.search_products(query=q)
     return products
 
 
@@ -28,11 +28,11 @@ async def get_product(product_id: int, db: Session = Depends(get_db)):
     return product
 
 
-@router.get("/products/search", response_model=List[Product])
-async def search_products(q: str, db: Session = Depends(get_db)):
-    """Search products by query"""
+@router.get("/products", response_model=List[Product])
+async def get_products(db: Session = Depends(get_db)):
+    """Get all products"""
     product_service = ProductService(db, Config.IMAGE_DIR)
-    products = product_service.search_products(query=q)
+    products = product_service.get_all_products()
     return products
 
 
