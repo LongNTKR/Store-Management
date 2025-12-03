@@ -30,6 +30,7 @@ pandas==2.2.2
 # Utilities
 python-dotenv==1.0.1
 requests==2.31.0
+apscheduler==3.10.4  # Background job scheduling for auto-cleanup
 
 # Image Similarity Search (for AI search)
 scikit-learn==1.4.2

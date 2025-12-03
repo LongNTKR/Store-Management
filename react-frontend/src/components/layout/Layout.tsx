@@ -11,7 +11,8 @@ import {
     FileText,
     Users,
     BarChart3,
-    Store
+    Store,
+    Trash2
 } from 'lucide-react'
 
 interface LayoutProps {
@@ -21,6 +22,7 @@ interface LayoutProps {
 const menuItems = [
     { icon: Home, label: '🏠 Trang chủ', path: '/' },
     { icon: Package, label: '📦 Sản phẩm', path: '/products' },
+    { icon: Trash2, label: '🗑️ Thùng rác', path: '/products/trash', isSubItem: true },
     { icon: Upload, label: '📥 Nhập báo giá', path: '/import' },
     { icon: Search, label: '🔍 Tìm kiếm AI', path: '/search' },
     { icon: FileText, label: '🧾 Hóa đơn', path: '/invoices' },
@@ -68,7 +70,10 @@ export function Layout({ children }: LayoutProps) {
                                 key={item.path}
                                 to={item.path}
                                 className={cn(
-                                    "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                                    "flex items-center gap-3 rounded-lg text-sm font-medium transition-colors",
+                                    "isSubItem" in item && item.isSubItem
+                                        ? "px-7 py-2 text-xs opacity-80"  // Sub-item: more indent
+                                        : "px-3 py-2",  // Main item
                                     location.pathname === item.path
                                         ? "bg-primary/10 text-primary"
                                         : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"

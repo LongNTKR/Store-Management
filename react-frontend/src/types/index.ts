@@ -10,6 +10,7 @@ export interface Product {
     created_at: string
     updated_at: string
     is_active: boolean
+    deleted_at?: string | null
     images?: string[]
 }
 

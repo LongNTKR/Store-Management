@@ -211,7 +211,8 @@ class ProductService:
 
     def delete_product(self, product_id: int) -> bool:
         """
-        Soft delete a product (set is_active to False).
+        Soft delete a product (set is_active to False and record deletion timestamp).
+        Product can be restored within 30 days, after which it will be permanently deleted.
 
         Args:
             product_id: Product ID
@@ -224,14 +225,84 @@ class ProductService:
             return False
 
         product.is_active = False
+        product.deleted_at = datetime.utcnow()
         product.updated_at = datetime.utcnow()
 
         self.db.commit()
         return True
 
+    def restore_product(self, product_id: int) -> Optional[Product]:
+        """
+        Restore a soft-deleted product.
+
+        Args:
+            product_id: Product ID
+
+        Returns:
+            Restored product if successful, None otherwise
+        """
+        # Use get_product with is_active=False to find deleted products
+        product = self.db.query(Product).filter(Product.id == product_id).first()
+        if not product or product.is_active:
+            return None
+
+        product.is_active = True
+        product.deleted_at = None
+        product.updated_at = datetime.utcnow()
+
+        self.db.commit()
+        self.db.refresh(product)
+
+        return product
+
+    def get_deleted_products(self) -> List[Product]:
+        """
+        Get all soft-deleted products (in trash).
+
+        Returns:
+            List of deleted products ordered by deletion date (newest first)
+        """
+        return self.db.query(Product).filter(
+            Product.is_active == False,
+            Product.deleted_at.isnot(None)
+        ).order_by(Product.deleted_at.desc()).all()
+
+    def cleanup_old_deletions(self, days_old: int = 30) -> int:
+        """
+        Permanently delete products that have been in trash for more than specified days.
+        This is called by the auto-cleanup background job.
+
+        Args:
+            days_old: Number of days after which to permanently delete (default 30)
+
+        Returns:
+            Number of products permanently deleted
+        """
+        from datetime import timedelta
+
+        cutoff_date = datetime.utcnow() - timedelta(days=days_old)
+
+        # Find products deleted before cutoff date
+        old_deletions = self.db.query(Product).filter(
+            Product.is_active == False,
+            Product.deleted_at.isnot(None),
+            Product.deleted_at < cutoff_date
+        ).all()
+
+        count = len(old_deletions)
+
+        # Permanently delete them
+        for product in old_deletions:
+            self.db.delete(product)
+
+        self.db.commit()
+
+        return count
+
     def permanently_delete_product(self, product_id: int) -> bool:
         """
         Permanently delete a product from database.
+        This action cannot be undone.
 
         Args:
             product_id: Product ID
@@ -239,7 +310,8 @@ class ProductService:
         Returns:
             True if successful, False otherwise
         """
-        product = self.get_product(product_id)
+        # Allow deleting both active and deleted products
+        product = self.db.query(Product).filter(Product.id == product_id).first()
         if not product:
             return False
 

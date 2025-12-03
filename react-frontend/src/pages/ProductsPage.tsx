@@ -9,6 +9,7 @@ import { EditProductDialog } from '../components/products/EditProductDialog'
 import { formatCurrency } from '@/lib/utils'
 import type { Product } from '@/types'
 import { Pencil, Trash2, Search } from 'lucide-react'
+import { toast } from 'sonner'
 
 export function ProductsPage() {
     const [searchQuery, setSearchQuery] = useState('')
@@ -28,8 +29,14 @@ export function ProductsPage() {
     const isLoading = debouncedSearch ? (isSearchLoading && !searchResults) : isLoadingAll
 
     const handleDelete = async (id: number) => {
-        if (confirm('Bạn có chắc chắn muốn xóa sản phẩm này?')) {
+        // Delete immediately without confirmation
+        // User can restore from trash within 30 days
+        try {
+            const productName = products?.find(p => p.id === id)?.name || 'Sản phẩm'
             await deleteProduct.mutateAsync(id)
+            toast.success(`✓ Đã xóa "${productName}". Có thể khôi phục trong Thùng rác.`)
+        } catch (error) {
+            toast.error('Lỗi khi xóa sản phẩm')
         }
     }
 

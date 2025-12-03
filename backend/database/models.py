@@ -31,6 +31,7 @@ class Product(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     is_active = Column(Boolean, default=True)
+    deleted_at = Column(DateTime, nullable=True, index=True)  # NULL = active, timestamp = deleted
 
     # Relationships
     invoice_items = relationship('InvoiceItem', back_populates='product')

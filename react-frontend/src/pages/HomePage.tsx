@@ -7,13 +7,11 @@ import { useNavigate } from 'react-router-dom'
 import type { Invoice } from '@/types'
 
 export function HomePage() {
-    const { data: dashboard, isLoading } = useDashboard()
+    const { data: dashboard } = useDashboard()
     const navigate = useNavigate()
 
     // Extract data from unified dashboard response
     const stats = dashboard?.stats
-    const products = dashboard?.recent_products
-    const customers = dashboard?.recent_customers
     const invoices = dashboard?.recent_invoices
 
     const metrics = [
