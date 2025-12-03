@@ -2,7 +2,7 @@
 
 import os
 from typing import Optional
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, text, inspect
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import StaticPool
 
@@ -50,7 +50,22 @@ class DatabaseManager:
     def init_db(self):
         """Initialize database tables."""
         Base.metadata.create_all(bind=self.engine)
+        self._ensure_columns()
         print(f"Database initialized at: {self.db_path}")
+
+    def _ensure_columns(self):
+        """
+        Ensure new columns exist when the schema evolves.
+
+        Currently adds import_price to products if missing (existing SQLite DBs).
+        """
+        inspector = inspect(self.engine)
+        columns = [col['name'] for col in inspector.get_columns('products')]
+
+        if 'import_price' not in columns:
+            with self.engine.connect() as conn:
+                conn.execute(text("ALTER TABLE products ADD COLUMN import_price FLOAT"))
+                conn.commit()
 
     def get_session(self) -> Session:
         """

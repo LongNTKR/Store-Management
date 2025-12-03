@@ -30,6 +30,7 @@ class ProductService:
         self,
         name: str,
         price: float,
+        import_price: Optional[float] = None,
         description: Optional[str] = None,
         category: Optional[str] = None,
         unit: str = 'cái',
@@ -42,6 +43,7 @@ class ProductService:
         Args:
             name: Product name
             price: Product price
+            import_price: Product import/cost price
             description: Product description
             category: Product category
             unit: Unit of measurement
@@ -54,6 +56,7 @@ class ProductService:
         product = Product(
             name=name,
             price=price,
+            import_price=import_price,
             description=description,
             category=category,
             unit=unit,
@@ -153,11 +156,13 @@ class ProductService:
         product_id: int,
         name: Optional[str] = None,
         price: Optional[float] = None,
+        import_price: Optional[float] = None,
         description: Optional[str] = None,
         category: Optional[str] = None,
         unit: Optional[str] = None,
         stock_quantity: Optional[int] = None,
-        image_paths: Optional[List[str]] = None
+        image_paths: Optional[List[str]] = None,
+        price_change_reason: str = "Manual update"
     ) -> Optional[Product]:
         """
         Update product information.
@@ -166,11 +171,13 @@ class ProductService:
             product_id: Product ID
             name: New product name
             price: New product price (will track in price history)
+            import_price: New import/cost price
             description: New description
             category: New category
             unit: New unit
             stock_quantity: New stock quantity
             image_paths: New image paths
+            price_change_reason: Reason for logging price changes
 
         Returns:
             Updated Product object or None
@@ -181,11 +188,14 @@ class ProductService:
 
         # Track price change
         if price is not None and price != product.price:
-            self._record_price_change(product, price)
+            self._record_price_change(product, price, reason=price_change_reason)
             product.price = price
 
         if name is not None:
             product.name = name
+
+        if import_price is not None:
+            product.import_price = import_price
 
         if description is not None:
             product.description = description
@@ -375,6 +385,11 @@ class ProductService:
             try:
                 name = item.get('name', '').strip()
                 price = float(item.get('price', 0))
+                import_price = item.get('import_price')
+                import_price_value = None
+
+                if import_price not in (None, ''):
+                    import_price_value = float(import_price)
 
                 if not name or price <= 0:
                     errors.append(f"Invalid product data: {item}")
@@ -384,22 +399,29 @@ class ProductService:
                 existing_product = self.get_product_by_name(name)
 
                 if existing_product:
-                    if update_existing and existing_product.price != price:
-                        self.update_product(
-                            existing_product.id,
-                            price=price
-                        )
-                        self._record_price_change(
-                            existing_product,
-                            price,
-                            reason="Price update from supplier list"
-                        )
-                        updated_count += 1
+                    if update_existing:
+                        update_kwargs = {}
+
+                        if existing_product.price != price:
+                            update_kwargs['price'] = price
+                            self._record_price_change(
+                                existing_product,
+                                price,
+                                reason="Price update from supplier list"
+                            )
+
+                        if import_price_value is not None and existing_product.import_price != import_price_value:
+                            update_kwargs['import_price'] = import_price_value
+
+                        if update_kwargs:
+                            self.update_product(existing_product.id, **update_kwargs)
+                            updated_count += 1
                 else:
                     if add_new:
                         self.create_product(
                             name=name,
                             price=price,
+                            import_price=import_price_value,
                             description=item.get('description', ''),
                             category=item.get('category', None),
                             unit=item.get('unit', 'cái')

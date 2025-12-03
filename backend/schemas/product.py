@@ -6,6 +6,7 @@ from datetime import datetime
 class ProductBase(BaseModel):
     name: str
     price: float
+    import_price: Optional[float] = None
     description: Optional[str] = None
     category: Optional[str] = None
     unit: str = "cái"
@@ -19,6 +20,7 @@ class ProductCreate(ProductBase):
 class ProductUpdate(BaseModel):
     name: Optional[str] = None
     price: Optional[float] = None
+    import_price: Optional[float] = None
     description: Optional[str] = None
     category: Optional[str] = None
     unit: Optional[str] = None

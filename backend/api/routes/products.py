@@ -50,6 +50,7 @@ async def create_product(product: ProductCreate, db: Session = Depends(get_db)):
     new_product = product_service.create_product(
         name=product.name,
         price=product.price,
+        import_price=product.import_price,
         description=product.description,
         category=product.category,
         unit=product.unit,

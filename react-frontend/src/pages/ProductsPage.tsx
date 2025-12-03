@@ -75,9 +75,30 @@ export function ProductsPage() {
                                 <CardTitle>{product.name}</CardTitle>
                             </CardHeader>
                             <CardContent className="space-y-2">
-                                <p className="text-lg font-semibold">
-                                    {formatCurrency(product.price)}
-                                </p>
+                                <div className="space-y-1">
+                                    <p className="text-lg font-bold text-green-600">
+                                        💰 {formatCurrency(product.price)}
+                                    </p>
+                                    {product.import_price && product.import_price > 0 && (
+                                        <>
+                                            <p className="text-sm text-muted-foreground">
+                                                📦 Giá nhập: {formatCurrency(product.import_price)}
+                                            </p>
+                                            {product.price > product.import_price && (
+                                                <p className="text-xs text-blue-600">
+                                                    📈 Lãi: {formatCurrency(product.price - product.import_price)}
+                                                    ({(((product.price - product.import_price) / product.import_price) * 100).toFixed(1)}%)
+                                                </p>
+                                            )}
+                                            {product.price < product.import_price && (
+                                                <p className="text-xs text-red-600">
+                                                    📉 Lỗ: -{formatCurrency(product.import_price - product.price)}
+                                                    (-{(((product.import_price - product.price) / product.import_price) * 100).toFixed(1)}%)
+                                                </p>
+                                            )}
+                                        </>
+                                    )}
+                                </div>
                                 {product.category && (
                                     <p className="text-sm text-muted-foreground">📁 {product.category}</p>
                                 )}

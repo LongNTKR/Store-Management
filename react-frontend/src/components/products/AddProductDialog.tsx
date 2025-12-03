@@ -16,7 +16,12 @@ import { useCreateProduct } from '@/hooks/useProducts'
 
 const productSchema = z.object({
     name: z.string().min(1, 'Vui lòng nhập tên sản phẩm'),
-    price: z.number().min(0, 'Giá phải lớn hơn 0'),
+    price: z.number().positive('Giá bán phải lớn hơn 0'),
+    import_price: z.union([
+        z.number().positive('Giá nhập phải lớn hơn 0'),
+        z.nan(),
+        z.undefined()
+    ]).optional(),
     category: z.string().optional(),
     unit: z.string().min(1, 'Vui lòng nhập đơn vị'),
     description: z.string().optional(),
@@ -41,7 +46,6 @@ export function AddProductDialog({ open, onOpenChange }: AddProductDialogProps) 
         resolver: zodResolver(productSchema),
         defaultValues: {
             unit: 'cái',
-            price: 0,
         },
     })
 
@@ -49,6 +53,7 @@ export function AddProductDialog({ open, onOpenChange }: AddProductDialogProps) 
         try {
             await createProduct.mutateAsync({
                 ...data,
+                import_price: (data.import_price && !isNaN(data.import_price)) ? data.import_price : undefined,
                 stock_quantity: 0,
                 is_active: true,
             })
@@ -67,24 +72,40 @@ export function AddProductDialog({ open, onOpenChange }: AddProductDialogProps) 
                 </DialogHeader>
 
                 <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+                    <div className="space-y-2">
+                        <Label htmlFor="name">Tên sản phẩm *</Label>
+                        <Input
+                            id="name"
+                            placeholder="Ví dụ: Coca Cola"
+                            {...register('name')}
+                        />
+                        {errors.name && (
+                            <p className="text-sm text-destructive">{errors.name.message}</p>
+                        )}
+                    </div>
+
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
-                            <Label htmlFor="name">Tên sản phẩm *</Label>
+                            <Label htmlFor="import_price">Giá nhập (VNĐ)</Label>
                             <Input
-                                id="name"
-                                placeholder="Ví dụ: Coca Cola"
-                                {...register('name')}
+                                id="import_price"
+                                type="number"
+                                step="0.01"
+                                placeholder="0"
+                                {...register('import_price', { valueAsNumber: true })}
                             />
-                            {errors.name && (
-                                <p className="text-sm text-destructive">{errors.name.message}</p>
+                            {errors.import_price && (
+                                <p className="text-sm text-destructive">{errors.import_price.message}</p>
                             )}
                         </div>
 
                         <div className="space-y-2">
-                            <Label htmlFor="price">Giá (VNĐ) *</Label>
+                            <Label htmlFor="price">Giá bán (VNĐ) *</Label>
                             <Input
                                 id="price"
                                 type="number"
+                                step="0.01"
+                                placeholder="Bắt buộc"
                                 {...register('price', { valueAsNumber: true })}
                             />
                             {errors.price && (
@@ -104,7 +125,7 @@ export function AddProductDialog({ open, onOpenChange }: AddProductDialogProps) 
                         </div>
 
                         <div className="space-y-2">
-                            <Label htmlFor="unit">Đơn vị</Label>
+                            <Label htmlFor="unit">Đơn vị *</Label>
                             <Input id="unit" {...register('unit')} />
                         </div>
                     </div>

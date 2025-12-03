@@ -50,6 +50,7 @@ export function useDeleteProduct() {
         mutationFn: (id: number) => productService.delete(id),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['products'] })
+            queryClient.invalidateQueries({ queryKey: ['trash'] })
         },
     })
 }

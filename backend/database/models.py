@@ -19,6 +19,7 @@ class Product(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(255), nullable=False, index=True)
     price = Column(Float, nullable=False)
+    import_price = Column(Float, nullable=True)  # giá nhập (có thể không nhập)
     description = Column(Text, nullable=True)
     category = Column(String(100), nullable=True, index=True)
     unit = Column(String(50), default='cái')  # đơn vị: cái, hộp, kg, etc.
@@ -38,7 +39,7 @@ class Product(Base):
     price_history = relationship('PriceHistory', back_populates='product', order_by='PriceHistory.changed_at.desc()')
 
     def __repr__(self):
-        return f"<Product(id={self.id}, name='{self.name}', price={self.price})>"
+        return f"<Product(id={self.id}, name='{self.name}', price={self.price}, import_price={self.import_price})>"
 
     @property
     def images(self) -> List[str]:

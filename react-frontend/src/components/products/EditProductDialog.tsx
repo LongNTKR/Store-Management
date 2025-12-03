@@ -17,7 +17,12 @@ import type { Product } from '@/types'
 
 const productSchema = z.object({
     name: z.string().min(1, 'Vui lòng nhập tên sản phẩm'),
-    price: z.number().min(0, 'Giá phải lớn hơn 0'),
+    price: z.number().positive('Giá bán phải lớn hơn 0'),
+    import_price: z.union([
+        z.number().positive('Giá nhập phải lớn hơn 0'),
+        z.nan(),
+        z.undefined()
+    ]).optional(),
     category: z.string().optional(),
     unit: z.string(),
     description: z.string().optional(),
@@ -43,6 +48,7 @@ export function EditProductDialog({ product, open, onOpenChange }: EditProductDi
         defaultValues: {
             name: product.name,
             price: product.price,
+            import_price: product.import_price || undefined,
             category: product.category || '',
             unit: product.unit,
             description: product.description || '',
@@ -53,7 +59,10 @@ export function EditProductDialog({ product, open, onOpenChange }: EditProductDi
         try {
             await updateProduct.mutateAsync({
                 id: product.id,
-                product: data,
+                product: {
+                    ...data,
+                    import_price: (data.import_price && !isNaN(data.import_price)) ? data.import_price : undefined,
+                },
             })
             onOpenChange(false)
         } catch (error) {
@@ -69,24 +78,39 @@ export function EditProductDialog({ product, open, onOpenChange }: EditProductDi
                 </DialogHeader>
 
                 <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+                    <div className="space-y-2">
+                        <Label htmlFor="name">Tên sản phẩm *</Label>
+                        <Input
+                            id="name"
+                            placeholder="Ví dụ: Coca Cola"
+                            {...register('name')}
+                        />
+                        {errors.name && (
+                            <p className="text-sm text-destructive">{errors.name.message}</p>
+                        )}
+                    </div>
+
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
-                            <Label htmlFor="name">Tên sản phẩm *</Label>
+                            <Label htmlFor="import_price">Giá nhập (VNĐ)</Label>
                             <Input
-                                id="name"
-                                placeholder="Ví dụ: Coca Cola"
-                                {...register('name')}
+                                id="import_price"
+                                type="number"
+                                step="0.01"
+                                placeholder="0"
+                                {...register('import_price', { valueAsNumber: true })}
                             />
-                            {errors.name && (
-                                <p className="text-sm text-destructive">{errors.name.message}</p>
+                            {errors.import_price && (
+                                <p className="text-sm text-destructive">{errors.import_price.message}</p>
                             )}
                         </div>
 
                         <div className="space-y-2">
-                            <Label htmlFor="price">Giá (VNĐ) *</Label>
+                            <Label htmlFor="price">Giá bán (VNĐ) *</Label>
                             <Input
                                 id="price"
                                 type="number"
+                                step="0.01"
                                 {...register('price', { valueAsNumber: true })}
                             />
                             {errors.price && (
