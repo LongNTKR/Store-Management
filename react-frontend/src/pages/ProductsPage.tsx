@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { useProducts, useProductSearch, useDeleteProduct, useBulkDeleteProducts } from '../hooks/useProducts'
+import { useEffect, useState, useRef } from 'react'
+import { useProducts, useProductSearch, useDeleteProduct, useBulkDeleteProducts, useAutocomplete } from '../hooks/useProducts'
 import { useDebounce } from '../hooks/useDebounce'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -7,6 +7,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/componen
 import { AddProductDialog } from '../components/products/AddProductDialog'
 import { EditProductDialog } from '../components/products/EditProductDialog'
 import { ProductDetailsDialog } from '@/components/products/ProductDetailsDialog'
+import { SearchHighlight } from '@/components/shared/SearchHighlight'
 import { formatCurrency, getProductImageUrl, cn } from '@/lib/utils'
 import type { Product } from '@/types'
 import { Pencil, Trash2, Search, ImageOff } from 'lucide-react'
@@ -18,14 +19,21 @@ export function ProductsPage() {
     const [editingProduct, setEditingProduct] = useState<Product | null>(null)
     const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
     const [selectedProductIds, setSelectedProductIds] = useState<number[]>([])
+    const [showAutocomplete, setShowAutocomplete] = useState(false)
+    const [highlightedIndex, setHighlightedIndex] = useState(0)
+
+    const searchInputRef = useRef<HTMLInputElement>(null)
+    const autocompleteRef = useRef<HTMLDivElement>(null)
 
     const debouncedSearch = useDebounce(searchQuery.trim(), 100)
+    const debouncedAutocomplete = useDebounce(searchQuery.trim(), 300)
 
     const { data: allProducts, isLoading: isLoadingAll } = useProducts()
     const {
         data: searchResults,
         isLoading: isSearchLoading,
     } = useProductSearch(debouncedSearch)
+    const { data: autocompleteResults } = useAutocomplete(debouncedAutocomplete)
     const deleteProduct = useDeleteProduct()
     const bulkDeleteProducts = useBulkDeleteProducts()
 
@@ -96,6 +104,73 @@ export function ProductsPage() {
         }
     }
 
+    const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const value = e.target.value
+        setSearchQuery(value)
+        setShowAutocomplete(value.trim().length > 0)
+        setHighlightedIndex(0)
+    }
+
+    const handleAutocompleteSelect = (product: Product) => {
+        setSearchQuery(product.name)
+        setShowAutocomplete(false)
+        searchInputRef.current?.focus()
+    }
+
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (!showAutocomplete || !autocompleteResults || autocompleteResults.length === 0) {
+            return
+        }
+
+        switch (e.key) {
+            case 'ArrowDown':
+                e.preventDefault()
+                setHighlightedIndex((prev) =>
+                    prev < autocompleteResults.length - 1 ? prev + 1 : 0
+                )
+                break
+            case 'ArrowUp':
+                e.preventDefault()
+                setHighlightedIndex((prev) =>
+                    prev > 0 ? prev - 1 : autocompleteResults.length - 1
+                )
+                break
+            case 'Enter':
+                e.preventDefault()
+                if (autocompleteResults[highlightedIndex]) {
+                    handleAutocompleteSelect(autocompleteResults[highlightedIndex])
+                }
+                break
+            case 'Escape':
+                setShowAutocomplete(false)
+                break
+        }
+    }
+
+    // Close autocomplete when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (
+                autocompleteRef.current &&
+                !autocompleteRef.current.contains(event.target as Node) &&
+                searchInputRef.current &&
+                !searchInputRef.current.contains(event.target as Node)
+            ) {
+                setShowAutocomplete(false)
+            }
+        }
+
+        document.addEventListener('mousedown', handleClickOutside)
+        return () => document.removeEventListener('mousedown', handleClickOutside)
+    }, [])
+
+    // Update autocomplete visibility based on query
+    useEffect(() => {
+        if (searchQuery.trim().length === 0) {
+            setShowAutocomplete(false)
+        }
+    }, [searchQuery])
+
     return (
         <div>
             <h1 className="mb-6 flex items-center gap-3 text-3xl font-bold">
@@ -110,11 +185,54 @@ export function ProductsPage() {
                 <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                     <Input
-                        placeholder="🔍 Tìm kiếm sản phẩm"
+                        ref={searchInputRef}
+                        placeholder="🔍 Tìm kiếm sản phẩm (hỗ trợ tìm kiếm không dấu)"
                         value={searchQuery}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
+                        onChange={handleSearchChange}
+                        onKeyDown={handleKeyDown}
                         className="pl-10"
+                        autoComplete="off"
                     />
+
+                    {/* Autocomplete Dropdown */}
+                    {showAutocomplete && autocompleteResults && autocompleteResults.length > 0 && (
+                        <div
+                            ref={autocompleteRef}
+                            className="absolute left-0 right-0 top-full z-50 mt-1 max-h-80 overflow-y-auto rounded-md border bg-popover shadow-lg"
+                        >
+                            <div className="p-2 text-xs text-muted-foreground border-b">
+                                {autocompleteResults.length} gợi ý
+                            </div>
+                            {autocompleteResults.map((product, index) => (
+                                <div
+                                    key={product.id}
+                                    className={cn(
+                                        "flex cursor-pointer items-center gap-3 p-3 hover:bg-accent",
+                                        highlightedIndex === index && "bg-accent"
+                                    )}
+                                    onClick={() => handleAutocompleteSelect(product)}
+                                    onMouseEnter={() => setHighlightedIndex(index)}
+                                >
+                                    {product.images?.[0] && (
+                                        <img
+                                            src={getProductImageUrl(product.images[0])}
+                                            alt={product.name}
+                                            className="h-10 w-10 rounded object-cover"
+                                        />
+                                    )}
+                                    <div className="flex-1 min-w-0">
+                                        <div className="font-medium text-sm">
+                                            <SearchHighlight text={product.name} query={searchQuery} />
+                                        </div>
+                                        <div className="text-xs text-muted-foreground">
+                                            {formatCurrency(product.price)}
+                                            {product.category && ` • ${product.category}`}
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
                 <Button onClick={() => setShowAddDialog(true)}>
                     ➕ Thêm mới
@@ -206,7 +324,13 @@ export function ProductsPage() {
                                     )}
                                 </div>
                                 <CardHeader>
-                                    <CardTitle>{product.name}</CardTitle>
+                                    <CardTitle>
+                                        {searchQuery.trim() ? (
+                                            <SearchHighlight text={product.name} query={searchQuery} />
+                                        ) : (
+                                            product.name
+                                        )}
+                                    </CardTitle>
                                 </CardHeader>
                                 <CardContent className="space-y-2">
                                     <div className="space-y-1">
@@ -215,14 +339,24 @@ export function ProductsPage() {
                                         </p>
                                     </div>
                                     {product.category && (
-                                        <p className="text-sm text-muted-foreground">📁 {product.category}</p>
+                                        <p className="text-sm text-muted-foreground">
+                                            📁 {searchQuery.trim() ? (
+                                                <SearchHighlight text={product.category} query={searchQuery} />
+                                            ) : (
+                                                product.category
+                                            )}
+                                        </p>
                                     )}
                                     {product.unit && (
                                         <p className="text-sm text-muted-foreground">📦 Đơn vị: {product.unit}</p>
                                     )}
                                     {product.description && (
                                         <p className="line-clamp-2 text-sm text-muted-foreground">
-                                            📝 {product.description}
+                                            📝 {searchQuery.trim() ? (
+                                                <SearchHighlight text={product.description} query={searchQuery} />
+                                            ) : (
+                                                product.description
+                                            )}
                                         </p>
                                     )}
                                 </CardContent>
@@ -252,8 +386,9 @@ export function ProductsPage() {
                                         Xóa
                                     </Button>
                                 </CardFooter>
-                        </Card>
-                    )})}
+                            </Card>
+                        )
+                    })}
                 </div>
             )}
 
