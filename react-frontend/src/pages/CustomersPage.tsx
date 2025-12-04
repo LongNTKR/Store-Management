@@ -32,7 +32,12 @@ export function CustomersPage() {
     return (
         <div>
             <div className="mb-6 flex items-center justify-between">
-                <h1 className="text-3xl font-bold">👥 Quản Lý Khách Hàng</h1>
+                <h1 className="flex items-center gap-3 text-3xl font-bold">
+                    <span className="inline-flex h-20 w-20 flex-shrink-0 items-center justify-center">
+                        <img alt="Customers Icon" className="h-16 w-16 object-contain drop-shadow-sm" src="/Image_d6ma5pd6ma5pd6ma.png" />
+                    </span>
+                    Quản Lý Khách Hàng
+                </h1>
                 <Button onClick={() => setShowAddDialog(true)}>➕ Thêm mới</Button>
             </div>
 

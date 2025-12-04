@@ -51,7 +51,12 @@ export function InvoicesPage() {
     return (
         <div>
             <div className="mb-6 flex items-center justify-between">
-                <h1 className="text-3xl font-bold">🧾 Quản Lý Hóa Đơn</h1>
+                <h1 className="flex items-center gap-3 text-3xl font-bold">
+                    <span className="inline-flex h-20 w-20 flex-shrink-0 items-center justify-center">
+                        <img alt="Product Management Icon" className="h-16 w-16 object-contain drop-shadow-sm" src="/Image_3rudgh3rudgh3rud.png" />
+                    </span>
+                    Quản Lý Hóa Đơn
+                </h1>
                 <div className="flex items-center gap-3">
                     <span className="text-sm text-muted-foreground">Lọc trạng thái:</span>
                     <Select value={statusFilter} onValueChange={(value: 'all' | Invoice['status']) => setStatusFilter(value)}>

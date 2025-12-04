@@ -35,7 +35,12 @@ export function SearchPage() {
     return (
         <div className="space-y-8">
             <div>
-                <h1 className="mb-2 text-3xl font-bold">🔍 Tìm Kiếm AI</h1>
+                <h1 className="mb-2 flex items-center gap-3 text-3xl font-bold">
+                    <span className="inline-flex h-20 w-20 flex-shrink-0 items-center justify-center">
+                        <img alt="Product Management Icon" className="h-16 w-16 object-contain drop-shadow-sm" src="/Image_tzcpqytzcpqytzcp.png" />
+                    </span>
+                    Tìm Kiếm AI
+                </h1>
                 <p className="text-muted-foreground">Tìm theo tên hoặc hình ảnh sản phẩm.</p>
             </div>
 

@@ -98,7 +98,12 @@ export function ProductsPage() {
 
     return (
         <div>
-            <h1 className="mb-6 text-3xl font-bold">📦 Quản Lý Sản Phẩm</h1>
+            <h1 className="mb-6 flex items-center gap-3 text-3xl font-bold">
+                <span className="inline-flex h-20 w-20 flex-shrink-0 items-center justify-center">
+                    <img alt="Product Management Icon" className="h-16 w-16 object-contain drop-shadow-sm" src="/Image_iasozuiasozuiaso.png" />
+                </span>
+                Quản Lý Sản Phẩm
+            </h1>
 
             {/* Search and Add Button */}
             <div className="mb-6 flex gap-4">
@@ -163,7 +168,7 @@ export function ProductsPage() {
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                     {products.map((product) => {
                         const isSelected = selectedProductIds.includes(product.id)
-                        const hasImage = !!product.images && product.images.length > 0
+                        const coverImage = product.images?.[0]
                         return (
                             <Card
                                 key={product.id}
@@ -187,9 +192,9 @@ export function ProductsPage() {
                                     />
                                 </div>
                                 <div className="h-40 w-full overflow-hidden rounded-t-lg border-b bg-muted">
-                                    {hasImage ? (
+                                    {coverImage ? (
                                         <img
-                                            src={getProductImageUrl(product.images[0])}
+                                            src={getProductImageUrl(coverImage)}
                                             alt={product.name}
                                             className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                                         />

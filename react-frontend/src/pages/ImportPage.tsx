@@ -29,7 +29,12 @@ export function ImportPage() {
 
     return (
         <div>
-            <h1 className="mb-6 text-3xl font-bold">📥 Nhập Bảng Báo Giá</h1>
+            <h1 className="mb-6 flex items-center gap-3 text-3xl font-bold">
+                <span className="inline-flex h-20 w-20 flex-shrink-0 items-center justify-center">
+                    <img alt="Product Management Icon" className="h-16 w-16 object-contain drop-shadow-sm" src="/Image_8htcuh8htcuh8htc.png" />
+                </span>
+                Nhập Bảng Báo Giá
+            </h1>
             <Card>
                 <CardHeader>
                     <CardTitle>Hướng dẫn</CardTitle>

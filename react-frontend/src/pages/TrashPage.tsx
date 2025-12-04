@@ -131,7 +131,12 @@ export function TrashPage() {
     return (
         <div>
             <div className="mb-6">
-                <h1 className="mb-2 text-3xl font-bold">🗑️ Thùng Rác</h1>
+                <h1 className="mb-2 flex items-center gap-3 text-3xl font-bold">
+                    <span className="inline-flex h-20 w-20 flex-shrink-0 items-center justify-center">
+                        <img alt="Trash Icon" className="h-16 w-16 object-contain drop-shadow-sm" src="/Image_yapzehyapzehyapz.png" />
+                    </span>
+                    Thùng Rác
+                </h1>
                 <p className="text-muted-foreground">
                     Sản phẩm bị xóa sẽ được xóa vĩnh viễn sau 30 ngày
                 </p>
