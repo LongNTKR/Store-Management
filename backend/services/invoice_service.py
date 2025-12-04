@@ -18,6 +18,141 @@ VN_TZ = pytz.timezone('Asia/Ho_Chi_Minh')
 def get_vn_time():
     """Get current time in Vietnam timezone (UTC+7)."""
     return datetime.now(VN_TZ)
+
+
+def number_to_vietnamese_text(number: float) -> str:
+    """
+    Convert a number to Vietnamese text representation.
+    
+    Args:
+        number: The number to convert (e.g., 218028000)
+    
+    Returns:
+        Vietnamese text representation (e.g., "Hai trăm mười tám triệu hai mươi tám nghìn đồng")
+    
+    Examples:
+        218028000 -> "Hai trăm mười tám triệu hai mươi tám nghìn đồng"
+        1872505 -> "Một triệu tám trăm bảy mươi hai nghìn năm trăm linh năm đồng"
+        100001 -> "Một trăm nghìn không trăm linh một đồng"
+    """
+    if number == 0:
+        return "Không đồng"
+    
+    # Handle negative numbers
+    if number < 0:
+        return "Âm " + number_to_vietnamese_text(-number)
+    
+    # Round to integer
+    number = int(round(number))
+    
+    # Number words
+    ones = ["", "một", "hai", "ba", "bốn", "năm", "sáu", "bảy", "tám", "chín"]
+    
+    def read_two_digits(n, is_last_two_of_group):
+        """
+        Read the last two digits (tens and ones).
+        
+        Args:
+            n: Number from 0-99
+            is_last_two_of_group: True if these are the last 2 digits of a 3-digit group with hundreds > 0
+        
+        Returns:
+            Vietnamese text for the two digits
+        """
+        result = []
+        ten = n // 10
+        one = n % 10
+        
+        if ten == 0:
+            if one > 0:
+                if is_last_two_of_group:
+                    result.append("linh")
+                result.append(ones[one])
+        elif ten == 1:
+            result.append("mười")
+            if one == 5:
+                result.append("lăm")
+            elif one > 0:
+                result.append(ones[one])
+        else:  # ten >= 2
+            result.append(ones[ten])
+            result.append("mươi")
+            if one == 1:
+                result.append("mốt")
+            elif one == 5:
+                result.append("lăm")
+            elif one > 0:
+                result.append(ones[one])
+        
+        return " ".join(result)
+    
+    def read_three_digits(n):
+        """
+        Read a group of 3 digits (000-999).
+        
+        Args:
+            n: Number from 0-999
+        
+        Returns:
+            Vietnamese text for the three digits
+        """
+        if n == 0:
+            return ""
+        
+        hundred = n // 100
+        remainder = n % 100
+        
+        result = []
+        
+        if hundred > 0:
+            result.append(ones[hundred])
+            result.append("trăm")
+            if remainder > 0:
+                result.append(read_two_digits(remainder, is_last_two_of_group=True))
+        else:
+            # No hundreds, just read tens and ones normally
+            result.append(read_two_digits(remainder, is_last_two_of_group=False))
+        
+        return " ".join(result)
+    
+    # Break number into groups of 3 digits
+    groups = []
+    group_names = ["", "nghìn", "triệu", "tỷ"]
+    
+    # Extract groups from right to left
+    temp = number
+    while temp > 0:
+        groups.append(temp % 1000)
+        temp //= 1000
+    
+    # Pad to have at least 1 group
+    if not groups:
+        groups = [0]
+    
+    # Reverse to process from left to right (largest to smallest)
+    groups.reverse()
+    
+    # Read groups
+    result = []
+    num_groups = len(groups)
+    
+    for i, group_value in enumerate(groups):
+        if group_value > 0:
+            group_text = read_three_digits(group_value)
+            result.append(group_text)
+            
+            # Add group name (nghìn, triệu, tỷ)
+            group_index = num_groups - i - 1
+            if group_index > 0 and group_index < len(group_names):
+                result.append(group_names[group_index])
+    
+    text = " ".join(result)
+    
+    # Capitalize first letter
+    if text:
+        text = text[0].upper() + text[1:]
+    
+    return text + " đồng"
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
@@ -520,12 +655,38 @@ class InvoiceService:
         elements.append(Spacer(1, 20))
 
         # Items table
-        table_data = [['STT', 'Sản phẩm', 'Đơn giá', 'SL', 'Đơn vị', 'Thành tiền']]
+        # Create header with Paragraphs for better text wrapping
+        header_style = ParagraphStyle(
+            'HeaderStyle',
+            parent=styles['Normal'],
+            fontName=FONT_BOLD,
+            fontSize=8,
+            textColor=colors.whitesmoke,
+            alignment=1  # Center
+        )
+        
+        table_data = [[
+            Paragraph('<b>STT</b>', header_style),
+            Paragraph('<b>Sản phẩm</b>', header_style),
+            Paragraph('<b>Đơn giá<br/>(VNĐ)</b>', header_style),
+            Paragraph('<b>SL</b>', header_style),
+            Paragraph('<b>Đơn vị</b>', header_style),
+            Paragraph('<b>Thành tiền<br/>(VNĐ)</b>', header_style)
+        ]]
+
+        # Product name style for wrapping
+        product_style = ParagraphStyle(
+            'ProductStyle',
+            parent=styles['Normal'],
+            fontName=FONT_NORMAL,
+            fontSize=8,
+            alignment=0  # Left align
+        )
 
         for idx, item in enumerate(invoice.items, 1):
             table_data.append([
                 str(idx),
-                item.product_name,
+                Paragraph(item.product_name, product_style),
                 f"{item.product_price:,.0f}",
                 str(item.quantity),
                 item.unit,
@@ -558,35 +719,58 @@ class InvoiceService:
             footer_styles.append(('ALIGN', (0, row_idx), (4, row_idx), 'RIGHT'))
             row_idx += 1
         
-        # Total
-        # Use Paragraph for the total row to support HTML tags like <b>
-        table_data.append([
-            Paragraph('<b>Tổng cộng:</b>', info_style), '', '', '', '', 
-            Paragraph(f"<b>{invoice.total:,.0f} VNĐ</b>", info_style)
-        ])
-        footer_styles.append(('SPAN', (0, row_idx), (4, row_idx)))
-        footer_styles.append(('ALIGN', (0, row_idx), (4, row_idx), 'RIGHT'))
+        # Total - span entire width with left and right alignment
+        # Create a style for left-aligned total label
+        total_label_style = ParagraphStyle(
+            'TotalLabelStyle',
+            parent=styles['Normal'],
+            fontName=FONT_BOLD,
+            fontSize=11,
+            alignment=0  # Left align
+        )
+        total_value_style = ParagraphStyle(
+            'TotalValueStyle',
+            parent=styles['Normal'],
+            fontName=FONT_BOLD,
+            fontSize=11,
+            alignment=2  # Right align
+        )
+        table_data.append(['Tổng cộng:', '', '', '', '', f"{invoice.total:,.0f}"])
+        footer_styles.append(('SPAN', (1, row_idx), (4, row_idx)))  # Span columns 1-4 only
+        footer_styles.append(('ALIGN', (0, row_idx), (0, row_idx), 'LEFT'))  # Left align label
+        footer_styles.append(('ALIGN', (5, row_idx), (5, row_idx), 'RIGHT'))  # Right align value
+        footer_styles.append(('FONTNAME', (0, row_idx), (-1, row_idx), FONT_BOLD))
+        footer_styles.append(('FONTSIZE', (0, row_idx), (-1, row_idx), 11))
         # Add top border for Total row
         footer_styles.append(('LINEABOVE', (0, row_idx), (-1, row_idx), 1, colors.black))
-        footer_styles.append(('BOTTOMPADDING', (0, row_idx), (-1, row_idx), 15)) # Add some padding
+        footer_styles.append(('BOTTOMPADDING', (0, row_idx), (-1, row_idx), 15))
         footer_styles.append(('TOPPADDING', (0, row_idx), (-1, row_idx), 10))
 
-        table = Table(table_data, colWidths=[30, 180, 70, 30, 60, 80])
+
+        # Adjusted column widths for larger numbers:
+        # STT: 25, Product: 135, Price(9 digits): 70, Qty(3 digits): 30, Unit: 55, Subtotal(12 digits): 135
+        table = Table(table_data, colWidths=[25, 135, 70, 30, 55, 135])
+
         
         # Base styles
         table_styles = [
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3498DB')),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, 0), 'MIDDLE'),  # Vertically center header
+            ('VALIGN', (0, 1), (-1, num_items), 'TOP'),  # Top align product rows
             ('FONTNAME', (0, 0), (-1, 0), FONT_BOLD),
-            ('FONTSIZE', (0, 0), (-1, 0), 12),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('FONTSIZE', (0, 0), (-1, 0), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 6),
+            ('TOPPADDING', (0, 0), (-1, 0), 6),
             ('BACKGROUND', (0, 1), (-1, num_items), colors.beige),
             ('GRID', (0, 0), (-1, num_items), 1, colors.black),
             ('ALIGN', (2, 1), (-1, -1), 'RIGHT'), # Right align prices and totals
+            ('ALIGN', (1, 1), (1, num_items), 'LEFT'), # Left align product names
             ('FONTNAME', (0, -1), (-1, -1), FONT_BOLD),
-            ('FONTSIZE', (0, -1), (-1, -1), 12),
+            ('FONTSIZE', (0, -1), (-1, -1), 11),
             ('FONTNAME', (0, 1), (-1, -2), FONT_NORMAL),
+            ('FONTSIZE', (0, 1), (-1, num_items), 8),
         ]
         
         # Add footer styles
@@ -595,11 +779,91 @@ class InvoiceService:
         table.setStyle(TableStyle(table_styles))
 
         elements.append(table)
+        elements.append(Spacer(1, 15))
+        
+        # Amount in words - Create a nice box for better visibility
+        amount_text = number_to_vietnamese_text(invoice.total)
+        
+        # Create styles for the amount in words box
+        label_style = ParagraphStyle(
+            'AmountLabel',
+            parent=styles['Normal'],
+            fontName=FONT_BOLD,
+            fontSize=10,
+            textColor=colors.HexColor('#2C3E50'),
+            alignment=0
+        )
+        
+        value_style = ParagraphStyle(
+            'AmountValue',
+            parent=styles['Normal'],
+            fontName=FONT_NORMAL,
+            fontSize=10,
+            textColor=colors.HexColor('#16A085'),
+            alignment=0,
+            leading=14
+        )
+        
+        # Create a table for the amount in words with nice styling
+        amount_box_data = [[
+            Paragraph('<b>Thành tiền bằng chữ:</b>', label_style),
+            Paragraph(f'<i>{amount_text}</i>', value_style)
+        ]]
+        
+        amount_box = Table(amount_box_data, colWidths=[120, 330])
+        amount_box.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#E8F8F5')),
+            ('TEXTCOLOR', (0, 0), (-1, -1), colors.HexColor('#2C3E50')),
+            ('ALIGN', (0, 0), (0, 0), 'LEFT'),
+            ('ALIGN', (1, 0), (1, 0), 'LEFT'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 12),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 12),
+            ('TOPPADDING', (0, 0), (-1, -1), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
+            ('BOX', (0, 0), (-1, -1), 1.5, colors.HexColor('#16A085')),
+            ('LINEAFTER', (0, 0), (0, 0), 1, colors.HexColor('#BDC3C7')),
+        ]))
+        
+        elements.append(amount_box)
         elements.append(Spacer(1, 20))
 
         # Notes
         if invoice.notes:
             elements.append(Paragraph(f"<b>Ghi chú:</b> {invoice.notes}", info_style))
+            elements.append(Spacer(1, 12))
+
+        # Signature section
+        elements.append(Spacer(1, 30))
+        
+        signature_style = ParagraphStyle(
+            'SignatureStyle',
+            parent=styles['Normal'],
+            fontName=FONT_NORMAL,
+            fontSize=11,
+            alignment=1  # Center alignment
+        )
+        
+        signature_data = [
+            [
+                Paragraph('<b>Người nhận hàng</b><br/>(Ký, ghi rõ họ tên)', signature_style),
+                Paragraph('<b>Người bán hàng</b><br/>(Ký, ghi rõ họ tên)', signature_style)
+            ],
+            ['', '']  # Empty row for signature space
+        ]
+        
+        signature_table = Table(signature_data, colWidths=[225, 225])
+        signature_table.setStyle(TableStyle([
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, 0), 'TOP'),
+            ('VALIGN', (0, 1), (-1, 1), 'BOTTOM'),
+            ('FONTNAME', (0, 0), (-1, 0), FONT_NORMAL),
+            ('FONTSIZE', (0, 0), (-1, 0), 11),
+            ('TOPPADDING', (0, 0), (-1, 0), 10),
+            ('BOTTOMPADDING', (0, 1), (-1, 1), 60),  # Space for signature
+        ]))
+        
+        elements.append(signature_table)
 
         # Build PDF
         def draw_watermark(canvas, doc):
