@@ -1,6 +1,6 @@
 """Customer management service."""
 
-from typing import List, Optional
+from typing import List, Optional, Dict
 from datetime import datetime
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
@@ -288,6 +288,26 @@ class CustomerService:
         self.db.commit()
         return True
 
+    def delete_customers(self, customer_ids: List[int]) -> Dict[str, int]:
+        """Bulk soft delete customers."""
+        unique_ids = list(dict.fromkeys(cid for cid in customer_ids if isinstance(cid, int)))
+        if not unique_ids:
+            return {"requested": 0, "deleted": 0}
+
+        customers = self.db.query(Customer).filter(
+            Customer.id.in_(unique_ids),
+            Customer.is_active == True
+        ).all()
+
+        now = get_vn_time()
+        for customer in customers:
+            customer.is_active = False
+            customer.deleted_at = now
+            customer.updated_at = now
+
+        self.db.commit()
+        return {"requested": len(unique_ids), "deleted": len(customers)}
+
     def restore_customer(self, customer_id: int) -> bool:
         """
         Restore a soft-deleted customer.
@@ -308,6 +328,27 @@ class CustomerService:
 
         self.db.commit()
         return True
+
+    def restore_customers(self, customer_ids: List[int]) -> Dict[str, int]:
+        """Bulk restore soft-deleted customers."""
+        unique_ids = list(dict.fromkeys(cid for cid in customer_ids if isinstance(cid, int)))
+        if not unique_ids:
+            return {"requested": 0, "restored": 0}
+
+        customers = self.db.query(Customer).filter(
+            Customer.id.in_(unique_ids),
+            Customer.is_active == False,
+            Customer.deleted_at.isnot(None)
+        ).all()
+
+        now = get_vn_time()
+        for customer in customers:
+            customer.is_active = True
+            customer.deleted_at = None
+            customer.updated_at = now
+
+        self.db.commit()
+        return {"requested": len(unique_ids), "restored": len(customers)}
 
     def permanently_delete_customer(self, customer_id: int) -> bool:
         """

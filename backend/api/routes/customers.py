@@ -1,7 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Body, Query
+from typing import Any
 from sqlalchemy.orm import Session
 from api.dependencies import get_db
-from schemas.customer import Customer, CustomerCreate, CustomerUpdate, CustomerStats
+from schemas.customer import (
+    Customer,
+    CustomerCreate,
+    CustomerUpdate,
+    CustomerStats,
+    CustomerBulkActionRequest
+)
 from schemas.common import PaginatedResponse
 from services import CustomerService
 
@@ -121,6 +128,34 @@ async def update_customer(customer_id: int, customer: CustomerUpdate, db: Sessio
     return updated_customer
 
 
+@router.delete("/customers/bulk")
+async def bulk_delete_customers(
+    payload: Any = Body(default=None),
+    ids: list[int] | None = Query(default=None, alias="ids"),
+    db: Session = Depends(get_db)
+):
+    """Bulk soft delete customers (accept ids via body or query)."""
+    body_ids = []
+    if isinstance(payload, dict):
+        maybe_ids = payload.get("ids")
+        if isinstance(maybe_ids, list):
+            body_ids = [int(x) for x in maybe_ids if isinstance(x, (int, str)) and str(x).isdigit()]
+
+    query_ids = [int(x) for x in ids] if ids else []
+    customer_ids = body_ids or query_ids
+
+    if not customer_ids:
+        raise HTTPException(status_code=400, detail="Không có khách hàng để xóa")
+
+    customer_service = CustomerService(db)
+    result = customer_service.delete_customers(customer_ids)
+    return {
+        "message": f"{result['deleted']} khách hàng đã được chuyển vào Thùng rác.",
+        "requested": result["requested"],
+        "deleted": result["deleted"],
+    }
+
+
 @router.delete("/customers/{customer_id}")
 async def delete_customer(customer_id: int, db: Session = Depends(get_db)):
     """Delete a customer"""
@@ -137,6 +172,21 @@ async def get_customer_stats(customer_id: int, db: Session = Depends(get_db)):
     customer_service = CustomerService(db)
     stats = customer_service.get_customer_stats(customer_id)
     return stats
+
+
+@router.post("/customers/restore/bulk")
+async def restore_customers(
+    payload: CustomerBulkActionRequest,
+    db: Session = Depends(get_db)
+):
+    """Bulk restore deleted customers."""
+    customer_service = CustomerService(db)
+    result = customer_service.restore_customers(payload.ids)
+    return {
+        "message": f"{result['restored']} khách hàng đã được khôi phục.",
+        "requested": result["requested"],
+        "restored": result["restored"],
+    }
 
 
 @router.post("/customers/{customer_id}/restore")

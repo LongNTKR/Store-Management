@@ -24,7 +24,15 @@ interface LayoutProps {
 const iconWrapperClass = "flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl"
 const iconImageClass = "h-7 w-7 object-contain"
 
-const menuItems = [
+type MenuItem = {
+    icon: typeof Home
+    label: string
+    path: string
+    customIcon: string
+    isSubItem?: boolean
+}
+
+const menuItems: MenuItem[] = [
     { icon: Home, label: 'Trang chủ', path: '/', customIcon: '/Image_4sq4av4sq4av4sq4.png' },
     {
         icon: Package,
@@ -100,7 +108,7 @@ export function Layout({ children }: LayoutProps) {
                                 to={item.path}
                                 className={cn(
                                     "flex items-center gap-3 rounded-xl font-medium transition-all",
-                                    "isSubItem" in item && item.isSubItem
+                                    item.isSubItem
                                         ? "pl-10 pr-3 py-2 text-sm opacity-80"
                                         : "px-3 py-2.5 text-[15px]",
                                     location.pathname === item.path
@@ -108,7 +116,7 @@ export function Layout({ children }: LayoutProps) {
                                         : "text-slate-600 hover:bg-slate-100"
                                 )}
                             >
-                                {"customIcon" in item && item.customIcon ? (
+                                {item.customIcon ? (
                                     <span className={cn(iconWrapperClass, "size-8 rounded-lg shadow-none ring-slate-200", item.isSubItem && "scale-90")}>
                                         <img src={item.customIcon} alt={item.label} className={iconImageClass} />
                                     </span>

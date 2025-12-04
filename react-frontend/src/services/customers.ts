@@ -47,6 +47,20 @@ export const customerService = {
         await api.delete(`/api/customers/${id}`)
     },
 
+    bulkDelete: async (ids: number[]): Promise<{ requested: number; deleted: number }> => {
+        const payload = { ids: ids.map((id) => Number(id)).filter((id) => Number.isInteger(id)) }
+        if (payload.ids.length === 0) {
+            throw new Error('Không có khách hàng hợp lệ để xóa')
+        }
+        const response = await api.delete('/api/customers/bulk', {
+            // send both body + query to satisfy any server parsing style
+            data: payload,
+            params: { ids: payload.ids },
+            headers: { 'Content-Type': 'application/json' },
+        })
+        return response.data
+    },
+
     getStats: async (id: number): Promise<CustomerStats> => {
         const response = await api.get(`/api/customers/${id}/stats`)
         return response.data
@@ -67,6 +81,11 @@ export const customerService = {
 
     restore: async (id: number): Promise<void> => {
         await api.post(`/api/customers/${id}/restore`)
+    },
+
+    bulkRestore: async (ids: number[]): Promise<{ requested: number; restored: number }> => {
+        const response = await api.post('/api/customers/restore/bulk', { ids })
+        return response.data
     },
 
     permanentlyDelete: async (id: number): Promise<void> => {

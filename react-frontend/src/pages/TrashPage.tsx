@@ -7,6 +7,7 @@ import {
     useBulkRestoreProducts,
     useTrashCustomers,
     useRestoreCustomer,
+    useBulkRestoreCustomers,
     usePermanentlyDeleteCustomer,
 } from '@/hooks/useTrash'
 import { useDebounce } from '@/hooks/useDebounce'
@@ -26,8 +27,6 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog'
-import type { Product, Customer } from '@/types'
-
 type TabType = 'products' | 'customers'
 
 export function TrashPage() {
@@ -52,6 +51,7 @@ export function TrashPage() {
     const permanentDeleteProductMutation = usePermanentlyDeleteProduct()
     const bulkPermanentDeleteProductsMutation = useBulkPermanentlyDeleteProducts()
     const bulkRestoreProductsMutation = useBulkRestoreProducts()
+    const bulkRestoreCustomersMutation = useBulkRestoreCustomers()
 
     // Customer queries
     const {
@@ -169,8 +169,7 @@ export function TrashPage() {
             if (activeTab === 'products') {
                 await bulkRestoreProductsMutation.mutateAsync(selectedIds)
             } else {
-                // Restore customers one by one (no bulk endpoint yet)
-                await Promise.all(selectedIds.map(id => restoreCustomerMutation.mutateAsync(id)))
+                await bulkRestoreCustomersMutation.mutateAsync(selectedIds)
             }
             toast.success(`✓ Đã khôi phục ${count} ${activeTab === 'products' ? 'sản phẩm' : 'khách hàng'}`)
             setSelectedIds([])

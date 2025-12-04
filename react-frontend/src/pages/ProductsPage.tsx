@@ -4,14 +4,14 @@ import { useDebounce } from '../hooks/useDebounce'
 import { useInfiniteScroll } from '@/hooks/useInfiniteScroll'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { AddProductDialog } from '../components/products/AddProductDialog'
 import { EditProductDialog } from '../components/products/EditProductDialog'
 import { ProductDetailsDialog } from '@/components/products/ProductDetailsDialog'
 import { SearchHighlight } from '@/components/shared/SearchHighlight'
 import { formatCurrency, getProductImageUrl, cn } from '@/lib/utils'
 import type { Product } from '@/types'
-import { Pencil, Trash2, Search, ImageOff } from 'lucide-react'
+import { Pencil, Trash2, Search, ImageOff, Circle, CheckCircle2, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 
 export function ProductsPage() {
@@ -250,17 +250,21 @@ export function ProductsPage() {
             </div>
 
             {products.length > 0 && (
-                <div className="mb-4 flex flex-wrap items-center gap-3 rounded-md border bg-muted/30 px-4 py-3 text-sm">
-                    {isSelectionMode ? (
-                        <span className="font-medium text-foreground">
-                            Đã chọn {selectedCount}/{products.length} sản phẩm
+                <div className="mb-4 flex flex-wrap items-center gap-3 rounded-md border bg-gradient-to-r from-slate-50 via-white to-blue-50 px-4 py-3 text-sm shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+                    <div className="flex items-center gap-3">
+                        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary ring-1 ring-primary/15">
+                            <Sparkles className="h-4 w-4" />
                         </span>
-                    ) : (
-                        <span className="text-muted-foreground">
-                            Bật các ô chọn để xóa nhiều sản phẩm cùng lúc
-                        </span>
-                    )}
-                    <div className="ml-auto flex flex-wrap items-center gap-3">
+                        <div>
+                            <p className="text-sm font-medium text-foreground">Chọn nhiều sản phẩm</p>
+                            <p className="text-xs text-muted-foreground">
+                                {isSelectionMode
+                                    ? `Đã chọn ${selectedCount}/${products.length} sản phẩm`
+                                    : 'Nhấn vào chấm tròn trên thẻ để chọn/bỏ chọn sản phẩm'}
+                            </p>
+                        </div>
+                    </div>
+                    <div className="ml-auto flex flex-wrap items-center gap-2">
                         <span className="text-xs text-muted-foreground">
                             Hiển thị {products.length}
                             {totalProducts ? `/${totalProducts}` : ''} sản phẩm
@@ -307,23 +311,10 @@ export function ProductsPage() {
                                     key={product.id}
                                     className={cn(
                                         "group relative cursor-pointer transition-shadow hover:shadow-md",
-                                        isSelected && "border-primary shadow-lg"
+                                        isSelected && "border-primary shadow-lg shadow-primary/10"
                                     )}
                                     onClick={() => handleCardClick(product)}
                                 >
-                                    <div className="absolute right-3 top-3 z-10 rounded-lg bg-background/80 p-1.5 shadow">
-                                        <input
-                                            type="checkbox"
-                                            className="h-5 w-5 cursor-pointer"
-                                            checked={isSelected}
-                                            onChange={(event) => {
-                                                event.stopPropagation()
-                                                toggleProductSelection(product.id)
-                                            }}
-                                            onClick={(event) => event.stopPropagation()}
-                                            aria-label="Chọn sản phẩm"
-                                        />
-                                    </div>
                                     <div className="h-40 w-full overflow-hidden rounded-t-lg border-b bg-muted">
                                         {coverImage ? (
                                             <img
@@ -338,14 +329,59 @@ export function ProductsPage() {
                                             </div>
                                         )}
                                     </div>
-                                    <CardHeader>
-                                        <CardTitle>
-                                            {searchQuery.trim() ? (
-                                                <SearchHighlight text={product.name} query={searchQuery} />
-                                            ) : (
-                                                product.name
-                                            )}
-                                        </CardTitle>
+                                    <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+                                        <div className="flex-1">
+                                            <CardTitle className="text-lg">
+                                                {searchQuery.trim() ? (
+                                                    <SearchHighlight text={product.name} query={searchQuery} />
+                                                ) : (
+                                                    product.name
+                                                )}
+                                            </CardTitle>
+                                        </div>
+                                        <div className="flex items-start gap-2">
+                                            <button
+                                                type="button"
+                                                onClick={(event) => {
+                                                    event.stopPropagation()
+                                                    toggleProductSelection(product.id)
+                                                }}
+                                                className={cn(
+                                                    "inline-flex h-10 w-10 items-center justify-center rounded-full border transition-all duration-150",
+                                                    isSelected
+                                                        ? "border-primary bg-primary/10 text-primary shadow-sm ring-2 ring-primary/20"
+                                                        : "border-slate-200 bg-white text-slate-500 hover:-translate-y-0.5 hover:border-primary/50 hover:text-primary"
+                                                )}
+                                                aria-pressed={isSelected}
+                                                aria-label={isSelected ? "Bỏ chọn sản phẩm" : "Chọn sản phẩm"}
+                                            >
+                                                {isSelected ? <CheckCircle2 className="h-5 w-5" /> : <Circle className="h-5 w-5" />}
+                                            </button>
+                                            <div className="flex items-start gap-1 rounded-full bg-white/80 px-1.5 py-1 shadow-sm ring-1 ring-slate-200">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-8 w-8 text-primary hover:text-primary"
+                                                    onClick={(event) => {
+                                                        event.stopPropagation()
+                                                        setEditingProduct(product)
+                                                    }}
+                                                >
+                                                    <Pencil className="h-4 w-4" />
+                                                </Button>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-8 w-8 text-destructive hover:text-destructive"
+                                                    onClick={async (event) => {
+                                                        event.stopPropagation()
+                                                        await handleDelete(product.id)
+                                                    }}
+                                                >
+                                                    <Trash2 className="h-4 w-4" />
+                                                </Button>
+                                            </div>
+                                        </div>
                                     </CardHeader>
                                     <CardContent className="space-y-2">
                                         <div className="space-y-1">
@@ -375,32 +411,6 @@ export function ProductsPage() {
                                             </p>
                                         )}
                                     </CardContent>
-                                    <CardFooter className="gap-2">
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            className="flex-1"
-                                            onClick={(event) => {
-                                                event.stopPropagation()
-                                                setEditingProduct(product)
-                                            }}
-                                        >
-                                            <Pencil className="mr-1 h-4 w-4" />
-                                            Sửa
-                                        </Button>
-                                        <Button
-                                            variant="destructive"
-                                            size="sm"
-                                            className="flex-1"
-                                            onClick={async (event) => {
-                                                event.stopPropagation()
-                                                await handleDelete(product.id)
-                                            }}
-                                        >
-                                            <Trash2 className="mr-1 h-4 w-4" />
-                                            Xóa
-                                        </Button>
-                                    </CardFooter>
                                 </Card>
                             )
                         })}

@@ -232,6 +232,36 @@ async def bulk_delete_products(
     }
 
 
+@router.post("/products/restore/bulk")
+async def restore_products(
+    payload: ProductBulkActionRequest,
+    db: Session = Depends(get_db)
+):
+    """Bulk restore deleted products."""
+    product_service = _get_product_service(db)
+    result = product_service.restore_products(payload.ids)
+    return {
+        "message": f"{result['restored']} sản phẩm đã được khôi phục.",
+        "requested": result["requested"],
+        "restored": result["restored"],
+    }
+
+
+@router.delete("/products/permanent/bulk")
+async def permanently_delete_products(
+    payload: ProductBulkActionRequest,
+    db: Session = Depends(get_db)
+):
+    """Bulk permanently delete products."""
+    product_service = _get_product_service(db)
+    result = product_service.permanently_delete_products(payload.ids)
+    return {
+        "message": f"{result['deleted']} sản phẩm đã bị xóa vĩnh viễn.",
+        "requested": result["requested"],
+        "deleted": result["deleted"],
+    }
+
+
 @router.delete("/products/{product_id}")
 async def delete_product(product_id: int, db: Session = Depends(get_db)):
     """Soft delete a product (moves to trash, can be restored within 30 days)"""
@@ -252,21 +282,6 @@ async def restore_product(product_id: int, db: Session = Depends(get_db)):
     return restored
 
 
-@router.post("/products/restore/bulk")
-async def restore_products(
-    payload: ProductBulkActionRequest,
-    db: Session = Depends(get_db)
-):
-    """Bulk restore deleted products."""
-    product_service = _get_product_service(db)
-    result = product_service.restore_products(payload.ids)
-    return {
-        "message": f"{result['restored']} sản phẩm đã được khôi phục.",
-        "requested": result["requested"],
-        "restored": result["restored"],
-    }
-
-
 @router.delete("/products/{product_id}/permanent")
 async def permanently_delete_product(product_id: int, db: Session = Depends(get_db)):
     """Permanently delete a product (cannot be undone)"""
@@ -275,18 +290,3 @@ async def permanently_delete_product(product_id: int, db: Session = Depends(get_
     if not success:
         raise HTTPException(status_code=404, detail="Product not found")
     return {"message": "Product permanently deleted"}
-
-
-@router.delete("/products/permanent/bulk")
-async def permanently_delete_products(
-    payload: ProductBulkActionRequest,
-    db: Session = Depends(get_db)
-):
-    """Bulk permanently delete products."""
-    product_service = _get_product_service(db)
-    result = product_service.permanently_delete_products(payload.ids)
-    return {
-        "message": f"{result['deleted']} sản phẩm đã bị xóa vĩnh viễn.",
-        "requested": result["requested"],
-        "deleted": result["deleted"],
-    }

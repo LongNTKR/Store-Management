@@ -2,7 +2,7 @@ import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-q
 import api from '@/services/api'
 import { productService } from '@/services/products'
 import { customerService } from '@/services/customers'
-import type { Product, Customer } from '../types'
+import type { Product } from '../types'
 
 const TRASH_PAGE_SIZE = 24
 
@@ -123,6 +123,18 @@ export function useRestoreCustomer() {
         },
         onSuccess: () => {
             // Invalidate both trash and customers queries
+            queryClient.invalidateQueries({ queryKey: ['trash-customers'] })
+            queryClient.invalidateQueries({ queryKey: ['customers'] })
+        },
+    })
+}
+
+export function useBulkRestoreCustomers() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: (ids: number[]) => customerService.bulkRestore(ids),
+        onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['trash-customers'] })
             queryClient.invalidateQueries({ queryKey: ['customers'] })
         },
