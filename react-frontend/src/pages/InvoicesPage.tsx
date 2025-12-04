@@ -17,6 +17,7 @@ const statusStyles: Record<Invoice['status'], string> = {
     pending: 'bg-amber-100 text-amber-800',
     paid: 'bg-emerald-100 text-emerald-800',
     cancelled: 'bg-gray-200 text-gray-700',
+    processing: 'bg-blue-100 text-blue-800',
 }
 
 export function InvoicesPage() {
@@ -279,6 +280,7 @@ export function InvoicesPage() {
                             <SelectContent>
                                 <SelectItem value="all">Tất cả</SelectItem>
                                 <SelectItem value="pending">Chưa thanh toán</SelectItem>
+                                <SelectItem value="processing">Chờ xử lý</SelectItem>
                                 <SelectItem value="paid">Đã thanh toán</SelectItem>
                                 <SelectItem value="cancelled">Đã hủy</SelectItem>
                             </SelectContent>
@@ -419,7 +421,7 @@ export function InvoicesPage() {
                                 <Select
                                     value={invoice.status}
                                     onValueChange={(newStatus: Invoice['status']) => handleStatusUpdate(invoice.id, newStatus)}
-                                    disabled={updateStatusMutation.isPending || invoice.status === 'paid' || invoice.status === 'cancelled'}
+                                    disabled={updateStatusMutation.isPending || ['paid', 'cancelled', 'processing'].includes(invoice.status)}
                                     onOpenChange={(open) => {
                                         // Prevent card click when interacting with select
                                         if (open) {
@@ -434,6 +436,7 @@ export function InvoicesPage() {
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
+                                        <SelectItem value="processing" disabled>Chờ xử lý</SelectItem>
                                         <SelectItem value="pending">Chưa thanh toán</SelectItem>
                                         <SelectItem value="paid">Đã thanh toán</SelectItem>
                                         <SelectItem value="cancelled">Đã hủy</SelectItem>
@@ -466,8 +469,8 @@ export function InvoicesPage() {
                                             e.stopPropagation()
                                             setEditingInvoice(invoice)
                                         }}
-                                        disabled={invoice.status !== 'pending'}
-                                        title={invoice.status !== 'pending' ? 'Chỉ chỉnh sửa hóa đơn chờ thanh toán' : ''}
+                                        disabled={['paid', 'cancelled'].includes(invoice.status)}
+                                        title={['paid', 'cancelled'].includes(invoice.status) ? 'Chỉ chỉnh sửa hóa đơn chờ thanh toán hoặc chờ xử lý' : ''}
                                     >
                                         <Pencil className="mr-2 h-4 w-4" />
                                         Sửa

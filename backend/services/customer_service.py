@@ -1,12 +1,12 @@
 """Customer management service."""
 
-from typing import List, Optional
+from typing import List, Optional, Dict
 from datetime import datetime
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from rapidfuzz import fuzz
 
-from database.models import Customer, Invoice
+from database.models import Customer, Invoice, get_vn_time
 from utils.text_utils import normalize_vietnamese, normalize_phone, normalize_email
 from config import Config
 
@@ -260,7 +260,7 @@ class CustomerService:
         if notes is not None:
             customer.notes = notes
 
-        customer.updated_at = datetime.utcnow()
+        customer.updated_at = get_vn_time()
 
         self.db.commit()
         self.db.refresh(customer)
@@ -269,7 +269,7 @@ class CustomerService:
 
     def delete_customer(self, customer_id: int) -> bool:
         """
-        Soft delete a customer (set is_active to False).
+        Soft delete a customer (set is_active to False and deleted_at timestamp).
 
         Args:
             customer_id: Customer ID
@@ -282,10 +282,164 @@ class CustomerService:
             return False
 
         customer.is_active = False
-        customer.updated_at = datetime.utcnow()
+        customer.deleted_at = get_vn_time()
+        customer.updated_at = get_vn_time()
 
         self.db.commit()
         return True
+
+    def delete_customers(self, customer_ids: List[int]) -> Dict[str, int]:
+        """Bulk soft delete customers."""
+        unique_ids = list(dict.fromkeys(cid for cid in customer_ids if isinstance(cid, int)))
+        if not unique_ids:
+            return {"requested": 0, "deleted": 0}
+
+        customers = self.db.query(Customer).filter(
+            Customer.id.in_(unique_ids),
+            Customer.is_active == True
+        ).all()
+
+        now = get_vn_time()
+        for customer in customers:
+            customer.is_active = False
+            customer.deleted_at = now
+            customer.updated_at = now
+
+        self.db.commit()
+        return {"requested": len(unique_ids), "deleted": len(customers)}
+
+    def restore_customer(self, customer_id: int) -> bool:
+        """
+        Restore a soft-deleted customer.
+
+        Args:
+            customer_id: Customer ID
+
+        Returns:
+            True if successful, False otherwise
+        """
+        customer = self.db.query(Customer).filter(Customer.id == customer_id).first()
+        if not customer:
+            return False
+
+        customer.is_active = True
+        customer.deleted_at = None
+        customer.updated_at = get_vn_time()
+
+        self.db.commit()
+        return True
+
+    def restore_customers(self, customer_ids: List[int]) -> Dict[str, int]:
+        """Bulk restore soft-deleted customers."""
+        unique_ids = list(dict.fromkeys(cid for cid in customer_ids if isinstance(cid, int)))
+        if not unique_ids:
+            return {"requested": 0, "restored": 0}
+
+        customers = self.db.query(Customer).filter(
+            Customer.id.in_(unique_ids),
+            Customer.is_active == False,
+            Customer.deleted_at.isnot(None)
+        ).all()
+
+        now = get_vn_time()
+        for customer in customers:
+            customer.is_active = True
+            customer.deleted_at = None
+            customer.updated_at = now
+
+        self.db.commit()
+        return {"requested": len(unique_ids), "restored": len(customers)}
+
+    def permanently_delete_customer(self, customer_id: int) -> bool:
+        """
+        Permanently delete a customer from database.
+
+        Args:
+            customer_id: Customer ID
+
+        Returns:
+            True if successful, False otherwise
+        """
+        customer = self.db.query(Customer).filter(Customer.id == customer_id).first()
+        if not customer:
+            return False
+
+        self.db.delete(customer)
+        self.db.commit()
+        return True
+
+    def get_trash_customers(self, is_active: bool = False) -> List[Customer]:
+        """
+        Get all soft-deleted customers.
+
+        Args:
+            is_active: Filter by active status (default False for trash)
+
+        Returns:
+            List of deleted customers
+        """
+        return self.db.query(Customer).filter(
+            Customer.is_active == is_active,
+            Customer.deleted_at.isnot(None)
+        ).order_by(Customer.deleted_at.desc()).all()
+
+    def get_trash_customers_paginated(self, limit: int = 30, offset: int = 0) -> tuple[List[Customer], int, bool, int | None]:
+        """
+        Get deleted customers with pagination support.
+        """
+        safe_limit, safe_offset = self._normalize_page_params(limit, offset)
+        base_query = self.db.query(Customer).filter(
+            Customer.is_active == False,
+            Customer.deleted_at.isnot(None)
+        )
+        total = base_query.count()
+
+        customers = base_query.order_by(Customer.deleted_at.desc()).offset(safe_offset).limit(safe_limit + 1).all()
+        has_more = len(customers) > safe_limit
+        next_offset = safe_offset + safe_limit if has_more else None
+
+        return customers[:safe_limit], total, has_more, next_offset
+
+    def search_trash_customers_paginated(self, query: str, limit: int = 30, offset: int = 0) -> tuple[List[Customer], int, bool, int | None]:
+        """
+        Search deleted customers with pagination.
+        """
+        safe_limit, safe_offset = self._normalize_page_params(limit, offset)
+
+        if not query or not query.strip():
+            return self.get_trash_customers_paginated(limit=safe_limit, offset=safe_offset)
+
+        query = query.strip()
+        normalized_query = normalize_vietnamese(query)
+        normalized_phone_query = normalize_phone(query)
+        normalized_email_query = normalize_email(query)
+
+        # Build search conditions
+        search_conditions = [
+            Customer.name.ilike(f"%{query}%"),
+            Customer.phone.ilike(f"%{query}%"),
+            Customer.email.ilike(f"%{query}%"),
+            Customer.normalized_name.ilike(f"%{normalized_query}%"),
+        ]
+
+        if normalized_phone_query:
+            search_conditions.append(Customer.normalized_phone.ilike(f"%{normalized_phone_query}%"))
+
+        if normalized_email_query:
+            search_conditions.append(Customer.normalized_email.ilike(f"%{normalized_email_query}%"))
+
+        base_query = self.db.query(Customer).filter(
+            Customer.is_active == False,
+            Customer.deleted_at.isnot(None),
+            or_(*search_conditions)
+        )
+
+        total = base_query.count()
+        results = base_query.order_by(Customer.deleted_at.desc()).offset(safe_offset).limit(safe_limit + 1).all()
+        has_more = len(results) > safe_limit
+        next_offset = safe_offset + safe_limit if has_more else None
+
+        return results[:safe_limit], total, has_more, next_offset
 
     def get_customer_invoices(self, customer_id: int) -> List[Invoice]:
         """

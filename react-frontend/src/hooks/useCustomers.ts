@@ -51,6 +51,19 @@ export function useDeleteCustomer() {
         mutationFn: (id: number) => customerService.delete(id),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['customers'] })
+            queryClient.invalidateQueries({ queryKey: ['trash-customers'] })
+        },
+    })
+}
+
+export function useBulkDeleteCustomers() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: (ids: number[]) => customerService.bulkDelete(ids),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['customers'] })
+            queryClient.invalidateQueries({ queryKey: ['trash-customers'] })
         },
     })
 }

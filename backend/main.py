@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from apscheduler.schedulers.background import BackgroundScheduler
 from api.routes import products, customers, invoices, import_routes, search, dashboard
-from jobs import cleanup_old_deletions
+from jobs import cleanup_old_deletions, cleanup_processing_invoices
 from config import Config
 
 # Configure logging
@@ -21,6 +21,13 @@ scheduler.add_job(
     minute=0,
     name='cleanup_old_deletions',
     id='cleanup_old_deletions'
+)
+scheduler.add_job(
+    cleanup_processing_invoices,
+    'interval',
+    hours=1,
+    name='cleanup_processing_invoices',
+    id='cleanup_processing_invoices'
 )
 
 

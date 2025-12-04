@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from typing import Optional, List
 from datetime import datetime
 
@@ -11,7 +11,10 @@ class InvoiceItemCreate(BaseModel):
 
 class InvoiceCreate(BaseModel):
     """Schema for creating a new invoice"""
-    items: List[InvoiceItemCreate] = Field(..., min_length=1, description="Invoice must have at least one item")
+    items: List[InvoiceItemCreate] = Field(
+        default_factory=list,
+        description="Invoice items. Required unless status is processing."
+    )
     customer_id: Optional[int] = Field(None, description="ID of registered customer (if applicable)")
     customer_name: Optional[str] = Field(None, description="Customer name (for walk-in customers)")
     customer_phone: Optional[str] = Field(None, description="Customer phone number")
@@ -20,12 +23,24 @@ class InvoiceCreate(BaseModel):
     tax: float = Field(0, ge=0, description="Tax amount (must be >= 0)")
     payment_method: Optional[str] = Field(None, description="Payment method: cash, transfer, card")
     notes: Optional[str] = Field(None, description="Additional notes")
-    status: str = Field("pending", description="Invoice status: pending, paid, cancelled")
+    status: str = Field(
+        "pending",
+        description="Invoice status: pending (chờ thanh toán), paid, cancelled, processing"
+    )
+
+    @model_validator(mode="after")
+    def validate_items_for_status(self):
+        if self.status != "processing" and len(self.items) == 0:
+            raise ValueError("Hóa đơn cần ít nhất 1 sản phẩm (trừ khi lưu ở trạng thái chờ xử lý).")
+        return self
 
 
 class InvoiceUpdate(BaseModel):
     """Schema for updating an existing invoice (only allowed when pending)."""
-    items: List[InvoiceItemCreate] = Field(..., min_length=1, description="Invoice must have at least one item")
+    items: List[InvoiceItemCreate] = Field(
+        default_factory=list,
+        description="Invoice must have at least one item when finalizing."
+    )
     customer_id: Optional[int] = Field(None, description="ID of registered customer (if applicable)")
     customer_name: Optional[str] = Field(None, description="Customer name (for walk-in customers)")
     customer_phone: Optional[str] = Field(None, description="Customer phone number")
@@ -34,11 +49,21 @@ class InvoiceUpdate(BaseModel):
     tax: float = Field(0, ge=0, description="Tax amount (must be >= 0)")
     payment_method: Optional[str] = Field(None, description="Payment method: cash, transfer, card")
     notes: Optional[str] = Field(None, description="Additional notes")
+    status: Optional[str] = Field(
+        None,
+        description="New status when finishing a processing invoice (pending or paid). Leave empty to keep current status."
+    )
+
+    @model_validator(mode="after")
+    def validate_items_for_update(self):
+        if self.status and self.status != "processing" and len(self.items) == 0:
+            raise ValueError("Cần ít nhất một sản phẩm trước khi đổi trạng thái hóa đơn.")
+        return self
 
 
 class InvoiceStatusUpdate(BaseModel):
     """Schema for updating invoice status"""
-    status: str = Field(..., description="New status: pending, paid, cancelled")
+    status: str = Field(..., description="New status: pending, paid, cancelled (không áp dụng cho hóa đơn chờ xử lý)")
 
 
 class InvoiceItem(BaseModel):

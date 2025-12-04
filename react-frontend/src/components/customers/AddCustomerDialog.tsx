@@ -17,7 +17,7 @@ import { useCreateCustomer } from '@/hooks/useCustomers'
 const customerSchema = z.object({
     name: z.string().min(1, 'Vui lòng nhập tên khách hàng'),
     phone: z.string().optional(),
-    email: z.string().email('Email không hợp lệ').optional(),
+    email: z.string().email('Email không hợp lệ').optional().or(z.literal('')),
     address: z.string().optional(),
     notes: z.string().optional(),
 })
@@ -43,7 +43,13 @@ export function AddCustomerDialog({ open, onOpenChange }: AddCustomerDialogProps
 
     const onSubmit = async (data: CustomerFormData) => {
         try {
-            await createCustomer.mutateAsync(data)
+            await createCustomer.mutateAsync({
+                name: data.name,
+                phone: data.phone || undefined,
+                email: data.email || undefined,
+                address: data.address || undefined,
+                notes: data.notes || undefined,
+            })
             reset()
             onOpenChange(false)
         } catch (error) {

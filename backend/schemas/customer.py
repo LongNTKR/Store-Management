@@ -1,5 +1,5 @@
-from pydantic import BaseModel
-from typing import Optional
+from pydantic import BaseModel, Field
+from typing import Optional, List
 from datetime import datetime
 
 
@@ -28,6 +28,7 @@ class Customer(CustomerBase):
     created_at: datetime
     updated_at: datetime
     is_active: bool = True
+    deleted_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -36,3 +37,7 @@ class Customer(CustomerBase):
 class CustomerStats(BaseModel):
     total_spent: float
     total_orders: int
+
+
+class CustomerBulkActionRequest(BaseModel):
+    ids: List[int] = Field(..., min_length=1, description="List of customer IDs to apply the action to")

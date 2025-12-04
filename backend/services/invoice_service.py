@@ -2,7 +2,7 @@
 
 import os
 from typing import List, Optional, Dict, Tuple
-from datetime import datetime
+from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_
 import pytz
@@ -14,6 +14,7 @@ from config import Config
 
 # UTC+7 timezone for Vietnam
 VN_TZ = pytz.timezone('Asia/Ho_Chi_Minh')
+ALLOWED_STATUSES = {'pending', 'paid', 'cancelled', 'processing'}
 
 def get_vn_time():
     """Get current time in Vietnam timezone (UTC+7)."""
@@ -255,6 +256,18 @@ class InvoiceService:
         Returns:
             Created Invoice object
         """
+        if status not in ALLOWED_STATUSES:
+            raise ValueError("Trạng thái hóa đơn không hợp lệ.")
+
+        # Allow empty items only when saving a draft invoice
+        if status != 'processing' and len(items) == 0:
+            raise ValueError("Hóa đơn cần ít nhất 1 sản phẩm (trừ khi lưu ở trạng thái chờ xử lý).")
+
+        # Draft invoices shouldn't carry over discount/tax to avoid negative totals
+        if status == 'processing' and len(items) == 0:
+            discount = 0
+            tax = 0
+
         # Calculate subtotal
         subtotal = 0
         invoice_items = []
@@ -281,8 +294,8 @@ class InvoiceService:
             invoice_items.append(invoice_item)
             subtotal += item_subtotal
 
-        # Calculate total
-        total = subtotal - discount + tax
+        # Calculate total (prevent negative totals)
+        total = max(0, subtotal - discount + tax)
 
         # Generate invoice number
         invoice_number = self.generate_invoice_number()
@@ -333,10 +346,16 @@ class InvoiceService:
         discount: float = 0,
         tax: float = 0,
         payment_method: Optional[str] = None,
-        notes: Optional[str] = None
+        notes: Optional[str] = None,
+        status: Optional[str] = None
     ) -> Optional[Invoice]:
         """
-        Update an existing invoice. Only invoices in 'pending' status can be edited.
+        Update an existing invoice.
+        
+        Business rules:
+        - Only invoices in 'pending' or 'processing' status can be edited.
+        - Processing invoices can only move to 'pending' or 'paid' and require items when finalized.
+        - Pending invoices cannot change status via this endpoint.
 
         Args:
             invoice_id: Invoice ID
@@ -357,8 +376,26 @@ class InvoiceService:
         if not invoice:
             return None
 
-        if invoice.status != 'pending':
-            raise ValueError("Chỉ có thể chỉnh sửa hóa đơn ở trạng thái chờ thanh toán.")
+        current_status = invoice.status
+        target_status = status or current_status
+
+        if target_status not in ALLOWED_STATUSES:
+            raise ValueError("Trạng thái hóa đơn không hợp lệ.")
+
+        if current_status in ['paid', 'cancelled']:
+            raise ValueError("Chỉ có thể chỉnh sửa hóa đơn ở trạng thái chờ thanh toán hoặc chờ xử lý.")
+
+        if current_status == 'pending' and target_status != 'pending':
+            raise ValueError("Không thể đổi trạng thái khi chỉnh sửa hóa đơn chờ thanh toán.")
+
+        if current_status == 'processing':
+            if target_status not in ['processing', 'pending', 'paid']:
+                raise ValueError("Hóa đơn chờ xử lý chỉ có thể hoàn tất về trạng thái chờ thanh toán hoặc đã thanh toán.")
+            if target_status != 'processing' and len(items) == 0:
+                raise ValueError("Cần ít nhất một sản phẩm để hoàn tất hóa đơn chờ xử lý.")
+
+        if len(items) == 0:
+            raise ValueError("Hóa đơn cần ít nhất một sản phẩm.")
 
         # Remove existing items and recalculate totals
         self.db.query(InvoiceItem).filter(InvoiceItem.invoice_id == invoice_id).delete()
@@ -397,6 +434,7 @@ class InvoiceService:
         invoice.discount = discount
         invoice.tax = tax
         invoice.total = total
+        invoice.status = target_status
         invoice.payment_method = payment_method
         invoice.notes = notes
         invoice.updated_at = get_vn_time()
@@ -566,6 +604,7 @@ class InvoiceService:
         
         Business rule: Only invoices with 'pending' status can be updated.
         Once an invoice is marked as 'paid' or 'cancelled', it cannot be changed.
+        Processing invoices must be finalized through update_invoice, not via direct status change.
         
         Args:
             invoice_id: Invoice ID
@@ -580,6 +619,11 @@ class InvoiceService:
         invoice = self.get_invoice(invoice_id)
         if not invoice:
             return None
+
+        if status not in ALLOWED_STATUSES:
+            raise ValueError("Trạng thái hóa đơn không hợp lệ.")
+        if status == 'processing':
+            raise ValueError("Không thể chuyển trạng thái sang 'chờ xử lý' thông qua API.")
         
         # Business rule: Only pending invoices can have their status changed
         if invoice.status in ['paid', 'cancelled']:
@@ -587,6 +631,8 @@ class InvoiceService:
                 f"Cannot update status of {invoice.status} invoice. "
                 "Only pending invoices can be updated."
             )
+        if invoice.status == 'processing':
+            raise ValueError("Không thể cập nhật trạng thái của hóa đơn đang chờ xử lý. Vui lòng hoàn tất hóa đơn trước.")
 
         invoice.status = status
         invoice.updated_at = get_vn_time()
@@ -595,6 +641,31 @@ class InvoiceService:
         self.db.refresh(invoice)
 
         return invoice
+
+    def cleanup_processing_invoices(self, max_age_hours: int = 24) -> int:
+        """
+        Delete processing invoices older than the given threshold.
+
+        Args:
+            max_age_hours: Age threshold in hours
+
+        Returns:
+            Number of invoices deleted
+        """
+        cutoff = get_vn_time() - timedelta(hours=max_age_hours)
+        stale_invoices = self.db.query(Invoice).filter(
+            Invoice.status == 'processing',
+            Invoice.created_at <= cutoff
+        ).all()
+
+        deleted_count = len(stale_invoices)
+        for invoice in stale_invoices:
+            self.db.delete(invoice)
+
+        if deleted_count > 0:
+            self.db.commit()
+
+        return deleted_count
 
     def generate_pdf(self, invoice_id: int, company_name: str = "Voi Store") -> str:
         """
@@ -1041,6 +1112,8 @@ class InvoiceService:
         from sqlalchemy import func, case
 
         filters = []
+        # Exclude draft/processing invoices from revenue stats
+        filters.append(Invoice.status != 'processing')
         if start_date:
             filters.append(Invoice.created_at >= start_date)
         if end_date:

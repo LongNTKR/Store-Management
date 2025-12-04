@@ -44,6 +44,14 @@ export function HomePage() {
         pending: 'Chưa thanh toán',
         paid: 'Đã thanh toán',
         cancelled: 'Đã hủy',
+        processing: 'Chờ xử lý',
+    }
+
+    const statusColors: Record<Invoice['status'], string> = {
+        paid: 'text-emerald-600',
+        pending: 'text-amber-600',
+        cancelled: 'text-rose-600',
+        processing: 'text-blue-600',
     }
 
     return (
@@ -95,7 +103,7 @@ export function HomePage() {
                                 </div>
                                 <div className="text-right">
                                     <p className="font-semibold">{formatCurrency(invoice.total)}</p>
-                                    <p className="text-xs font-semibold text-primary">
+                                    <p className={`text-xs font-semibold ${statusColors[invoice.status]}`}>
                                         {statusLabels[invoice.status]}
                                     </p>
                                 </div>
