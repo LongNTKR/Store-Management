@@ -28,6 +28,7 @@ class Customer(CustomerBase):
     created_at: datetime
     updated_at: datetime
     is_active: bool = True
+    deleted_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

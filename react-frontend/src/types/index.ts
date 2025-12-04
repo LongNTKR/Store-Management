@@ -32,6 +32,7 @@ export interface Customer {
     created_at: string
     updated_at: string
     is_active: boolean
+    deleted_at?: string | null
 }
 
 export interface InvoiceItemCreate {
@@ -49,7 +50,7 @@ export interface InvoiceCreate {
     tax: number
     payment_method?: string
     notes?: string
-    status: 'pending' | 'paid' | 'cancelled'
+    status: 'pending' | 'paid' | 'cancelled' | 'processing'
 }
 
 export interface InvoiceUpdate {
@@ -62,6 +63,7 @@ export interface InvoiceUpdate {
     tax: number
     payment_method?: string
     notes?: string
+    status?: 'pending' | 'paid' | 'cancelled' | 'processing'
 }
 
 export interface Invoice {
@@ -75,7 +77,7 @@ export interface Invoice {
     discount: number
     tax: number
     total: number
-    status: 'pending' | 'paid' | 'cancelled'
+    status: 'pending' | 'paid' | 'cancelled' | 'processing'
     payment_method?: string
     notes?: string
     created_at: string

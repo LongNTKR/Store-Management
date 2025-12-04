@@ -32,11 +32,11 @@ const menuItems = [
         path: '/products',
         customIcon: '/Image_iasozuiasozuiaso.png'
     },
-    { icon: Trash2, label: 'Thùng rác', path: '/products/trash', customIcon: '/Image_yapzehyapzehyapz.png', isSubItem: true },
     { icon: Upload, label: 'Nhập báo giá', path: '/import', customIcon: '/Image_8htcuh8htcuh8htc.png' },
     { icon: Search, label: 'Tìm kiếm AI', path: '/search', customIcon: '/Image_tzcpqytzcpqytzcp.png' },
     { icon: FileText, label: 'Hóa đơn', path: '/invoices', customIcon: '/Image_3rudgh3rudgh3rud.png' },
     { icon: Users, label: 'Khách hàng', path: '/customers', customIcon: '/Image_d6ma5pd6ma5pd6ma.png' },
+    { icon: Trash2, label: 'Thùng rác', path: '/trash', customIcon: '/Image_yapzehyapzehyapz.png' },
     { icon: BarChart3, label: 'Thống kê', path: '/stats', customIcon: '/Image_dtv8tsdtv8tsdtv8.png' },
 ]
 

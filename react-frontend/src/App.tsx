@@ -18,11 +18,11 @@ function App() {
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/products" element={<ProductsPage />} />
-          <Route path="/products/trash" element={<TrashPage />} />
           <Route path="/import" element={<ImportPage />} />
           <Route path="/search" element={<SearchPage />} />
           <Route path="/invoices" element={<InvoicesPage />} />
           <Route path="/customers" element={<CustomersPage />} />
+          <Route path="/trash" element={<TrashPage />} />
           <Route path="/stats" element={<StatsPage />} />
         </Routes>
       </Layout>

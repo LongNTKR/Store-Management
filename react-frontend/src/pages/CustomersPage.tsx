@@ -13,12 +13,21 @@ import { useInfiniteScroll } from '@/hooks/useInfiniteScroll'
 import { Search, Trash2, UserRound, Pencil } from 'lucide-react'
 import type { Customer } from '@/types'
 import { SearchHighlight } from '@/components/shared/SearchHighlight'
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog'
 
 export function CustomersPage() {
     const [searchQuery, setSearchQuery] = useState('')
     const [showAddDialog, setShowAddDialog] = useState(false)
     const [showEditDialog, setShowEditDialog] = useState(false)
     const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
+    const [deleteTarget, setDeleteTarget] = useState<{ id: number, name: string } | null>(null)
     const debouncedSearch = useDebounce(searchQuery.trim(), 300)
 
     const {
@@ -47,9 +56,17 @@ export function CustomersPage() {
         setShowEditDialog(true)
     }
 
-    const handleDelete = async (id: number) => {
-        if (confirm('Bạn có chắc chắn muốn xóa khách hàng này?')) {
-            await deleteCustomer.mutateAsync(id)
+    const handleDelete = (customer: Customer) => {
+        setDeleteTarget({ id: customer.id, name: customer.name })
+    }
+
+    const confirmDelete = async () => {
+        if (!deleteTarget) return
+
+        try {
+            await deleteCustomer.mutateAsync(deleteTarget.id)
+        } finally {
+            setDeleteTarget(null)
         }
     }
 
@@ -119,7 +136,7 @@ export function CustomersPage() {
                                             variant="ghost"
                                             size="icon"
                                             className="text-destructive hover:text-destructive"
-                                            onClick={() => handleDelete(customer.id)}
+                                            onClick={() => handleDelete(customer)}
                                         >
                                             <Trash2 className="h-4 w-4" />
                                         </Button>
@@ -153,6 +170,38 @@ export function CustomersPage() {
                 onOpenChange={setShowEditDialog}
                 customer={selectedCustomer}
             />
+
+            <Dialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+                <DialogContent className="sm:max-w-[400px]">
+                    <DialogHeader>
+                        <DialogTitle>Xóa khách hàng?</DialogTitle>
+                        <DialogDescription>
+                            Bạn có chắc chắn muốn xóa khách hàng "{deleteTarget?.name}" không?
+                            <br />
+                            <br />
+                            💡 Khách hàng sẽ được chuyển vào <strong>Thùng rác</strong> và có thể khôi phục lại trong vòng 30 ngày. Sau 30 ngày, khách hàng sẽ bị xóa vĩnh viễn.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter className="gap-2">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setDeleteTarget(null)}
+                            disabled={deleteCustomer.isPending}
+                        >
+                            Hủy
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="destructive"
+                            onClick={confirmDelete}
+                            disabled={deleteCustomer.isPending}
+                        >
+                            {deleteCustomer.isPending ? 'Đang xóa...' : 'Chuyển vào thùng rác'}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     )
 }

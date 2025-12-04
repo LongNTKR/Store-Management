@@ -98,6 +98,7 @@ class Customer(Base):
     created_at = Column(DateTime, default=get_vn_time)
     updated_at = Column(DateTime, default=get_vn_time, onupdate=get_vn_time)
     is_active = Column(Boolean, default=True)
+    deleted_at = Column(DateTime, nullable=True, index=True)  # NULL = active, timestamp = deleted
 
     # Relationships
     invoices = relationship('Invoice', back_populates='customer', order_by='Invoice.created_at.desc()')

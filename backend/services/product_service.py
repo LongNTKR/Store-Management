@@ -73,24 +73,33 @@ class ProductService:
     def _setup_fts5_if_needed(self):
         """Setup SQLite FTS5 virtual table and triggers for full-text search."""
         try:
-            # Check if FTS5 table exists
-            result = self.db.execute(text(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name='products_fts'"
+            # Check if FTS5 table exists and whether it needs rebuilding
+            schema_row = self.db.execute(text(
+                "SELECT name, sql FROM sqlite_master WHERE type='table' AND name='products_fts'"
             )).fetchone()
 
-            if result is None:
+            needs_setup = schema_row is None
+            if schema_row is not None:
+                schema_sql = schema_row[1] or ""
+                if "content='products'" in schema_sql:
+                    logger.info("Removing outdated FTS5 table definition...")
+                    # Remove old triggers before dropping the table
+                    for trigger_name in ("products_fts_insert", "products_fts_update", "products_fts_delete"):
+                        self.db.execute(text(f"DROP TRIGGER IF EXISTS {trigger_name}"))
+                    self.db.execute(text("DROP TABLE IF EXISTS products_fts"))
+                    needs_setup = True
+
+            if needs_setup:
                 logger.info("Creating FTS5 virtual table for products...")
 
-                # Create FTS5 virtual table
+                # Create FTS5 virtual table (standalone, no external content link)
                 self.db.execute(text("""
                     CREATE VIRTUAL TABLE IF NOT EXISTS products_fts USING fts5(
                         product_id UNINDEXED,
                         name,
                         normalized_name,
                         description,
-                        category,
-                        content='products',
-                        content_rowid='id'
+                        category
                     )
                 """))
 
@@ -129,7 +138,6 @@ class ProductService:
         except Exception as e:
             logger.warning(f"FTS5 setup failed (may not be critical): {e}")
             self.db.rollback()
-
     def create_product(
         self,
         name: str,

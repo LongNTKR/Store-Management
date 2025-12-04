@@ -77,18 +77,21 @@ async def create_invoice(invoice_data: InvoiceCreate, db: Session = Depends(get_
     items = [{"product_id": item.product_id, "quantity": item.quantity} for item in invoice_data.items]
 
     # Create invoice using the service
-    invoice = invoice_service.create_invoice(
-        items=items,
-        customer_id=invoice_data.customer_id,
-        customer_name=invoice_data.customer_name,
-        customer_phone=invoice_data.customer_phone,
-        customer_address=invoice_data.customer_address,
-        discount=invoice_data.discount,
-        tax=invoice_data.tax,
-        payment_method=invoice_data.payment_method,
-        notes=invoice_data.notes,
-        status=invoice_data.status
-    )
+    try:
+        invoice = invoice_service.create_invoice(
+            items=items,
+            customer_id=invoice_data.customer_id,
+            customer_name=invoice_data.customer_name,
+            customer_phone=invoice_data.customer_phone,
+            customer_address=invoice_data.customer_address,
+            discount=invoice_data.discount,
+            tax=invoice_data.tax,
+            payment_method=invoice_data.payment_method,
+            notes=invoice_data.notes,
+            status=invoice_data.status
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
     return invoice
 
@@ -110,7 +113,8 @@ async def update_invoice(
     """
     Update invoice details.
 
-    Business rule: Only invoices with 'pending' status can be edited.
+    Business rule: Only invoices with 'pending' or 'processing' status can be edited.
+    Processing invoices can be finalized to pending/paid through this endpoint.
     """
     invoice_service = InvoiceService(db, Config.INVOICE_DIR)
 
@@ -127,7 +131,8 @@ async def update_invoice(
             discount=invoice_data.discount,
             tax=invoice_data.tax,
             payment_method=invoice_data.payment_method,
-            notes=invoice_data.notes
+            notes=invoice_data.notes,
+            status=invoice_data.status
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
@@ -148,7 +153,7 @@ async def update_invoice_status(
     Update invoice status.
     
     Business rule: Only pending invoices can have their status changed.
-    Paid or cancelled invoices cannot be modified.
+    Paid, cancelled, or processing invoices cannot be modified via this endpoint.
     """
     invoice_service = InvoiceService(db, Config.INVOICE_DIR)
     

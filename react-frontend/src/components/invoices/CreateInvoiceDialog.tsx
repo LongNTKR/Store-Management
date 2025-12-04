@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../ui/dialog'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
@@ -12,6 +12,9 @@ import { useProductSearch } from '../../hooks/useProducts'
 import type { Product, InvoiceItemCreate, Invoice } from '../../types'
 import { Trash2, Search, Plus, Check, X } from 'lucide-react'
 import { useDebounce } from '../../hooks/useDebounce'
+import { useQueryClient } from '@tanstack/react-query'
+import { invoiceService } from '../../services/invoices'
+import { toast } from 'sonner'
 
 interface LineItem {
     product: Product
@@ -58,6 +61,7 @@ export function CreateInvoiceDialog({
     // Hooks
     const createInvoiceMutation = useCreateInvoice()
     const updateInvoiceMutation = useUpdateInvoice()
+    const queryClient = useQueryClient()
     const { data: customerPages } = useCustomers()
     const customers = useMemo(
         () => customerPages?.pages.flatMap((page) => page.items) ?? [],
@@ -65,6 +69,8 @@ export function CreateInvoiceDialog({
     )
     const { data: searchResults = [] } = useProductSearch(debouncedSearchQuery)
     const isSubmitting = isEditMode ? updateInvoiceMutation.isPending : createInvoiceMutation.isPending
+    const prevOpenRef = useRef(open)
+    const isMountedRef = useRef(true)
 
     // Update customer info when selecting registered customer
     useEffect(() => {
@@ -107,8 +113,6 @@ export function CreateInvoiceDialog({
                 quantity: item.quantity,
             }))
             setLineItems(mappedItems)
-        } else if (!open && mode === 'create') {
-            resetForm()
         }
     }, [isEditMode, invoiceToEdit, open, mode])
 
@@ -120,6 +124,19 @@ export function CreateInvoiceDialog({
     const total = useMemo(() => {
         return subtotal - discount + tax
     }, [subtotal, discount, tax])
+
+    const hasDraftData = useMemo(() => {
+        return (
+            lineItems.length > 0 ||
+            customerName.trim() !== '' ||
+            customerPhone.trim() !== '' ||
+            customerAddress.trim() !== '' ||
+            notes.trim() !== '' ||
+            discount > 0 ||
+            tax > 0 ||
+            (paymentMethod || '').trim() !== ''
+        )
+    }, [lineItems, customerName, customerPhone, customerAddress, notes, discount, tax, paymentMethod])
 
     // Add product to line items
     const addProduct = (product: Product) => {
@@ -160,7 +177,7 @@ export function CreateInvoiceDialog({
     }
 
     // Reset form
-    const resetForm = () => {
+    const resetForm = useCallback(() => {
         setCustomerType('walk-in')
         setSelectedCustomerId(undefined)
         setCustomerName('')
@@ -173,7 +190,86 @@ export function CreateInvoiceDialog({
         setPaymentMethod('')
         setStatus('pending')
         setNotes('')
-    }
+    }, [])
+
+    // Save unfinished form as a processing invoice when the dialog is closed unexpectedly
+    const saveProcessingDraft = useCallback(() => {
+        if (!hasDraftData || isSubmitting || isEditMode) return
+
+        const items: InvoiceItemCreate[] = lineItems.map(item => ({
+            product_id: item.product.id,
+            quantity: item.quantity
+        }))
+
+        // Fire-and-forget: không await, không block navigation
+        invoiceService.create({
+            items,
+            customer_id: customerType === 'registered' ? selectedCustomerId : undefined,
+            customer_name: customerName || undefined,
+            customer_phone: customerPhone || undefined,
+            customer_address: customerAddress || undefined,
+            discount,
+            tax,
+            payment_method: paymentMethod || undefined,
+            notes: notes || undefined,
+            status: 'processing'
+        })
+        .then(() => {
+            // Chỉ invalidate và show toast nếu component còn mounted
+            if (isMountedRef.current) {
+                queryClient.invalidateQueries({ queryKey: ['invoices'] })
+                queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+                queryClient.invalidateQueries({ queryKey: ['statistics'] })
+                toast.info('Đã lưu hóa đơn chờ xử lý. Bạn có thể tiếp tục tạo sau.')
+            }
+        })
+        .catch((error) => {
+            if (isMountedRef.current) {
+                console.error('Không thể lưu hóa đơn chờ xử lý:', error)
+                toast.error('Không thể lưu hóa đơn chờ xử lý')
+            }
+        })
+    }, [
+        hasDraftData,
+        isSubmitting,
+        isEditMode,
+        lineItems,
+        customerType,
+        selectedCustomerId,
+        customerName,
+        customerPhone,
+        customerAddress,
+        discount,
+        tax,
+        paymentMethod,
+        notes,
+        queryClient
+    ])
+
+    // Persist draft when user closes the dialog mid-creation
+    useEffect(() => {
+        // Chỉ xử lý khi dialog chuyển từ mở → đóng (prevOpenRef.current && !open)
+        if (prevOpenRef.current && !open) {
+            if (mode === 'create') {
+                // Lưu draft cho mode create
+                saveProcessingDraft()
+            }
+            // Reset form cho cả create và edit mode (chỉ khi transition)
+            if (isMountedRef.current) {
+                resetForm()
+            }
+        }
+
+        prevOpenRef.current = open
+    }, [open, mode, saveProcessingDraft, resetForm])
+
+    // Cleanup: track mounted state
+    useEffect(() => {
+        isMountedRef.current = true
+        return () => {
+            isMountedRef.current = false
+        }
+    }, [])
 
     // Handle submit
     const handleSubmit = async (e: React.FormEvent) => {
@@ -210,9 +306,10 @@ export function CreateInvoiceDialog({
 
         try {
             if (isEditMode && invoiceToEdit) {
+                const statusPayload = invoiceToEdit.status === 'processing' ? status : undefined
                 await updateInvoiceMutation.mutateAsync({
                     id: invoiceToEdit.id,
-                    invoice: invoiceData
+                    invoice: statusPayload ? { ...invoiceData, status: statusPayload } : invoiceData
                 })
             } else {
                 await createInvoiceMutation.mutateAsync({

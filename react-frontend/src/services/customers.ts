@@ -51,4 +51,25 @@ export const customerService = {
         const response = await api.get(`/api/customers/${id}/stats`)
         return response.data
     },
+
+    listTrash: async ({ limit = DEFAULT_LIMIT, offset = 0, search }: PageParams = {}): Promise<PaginatedResponse<Customer>> => {
+        const hasSearch = Boolean(search && search.trim())
+        const endpoint = hasSearch ? '/api/customers/trash/search' : '/api/customers/trash/list'
+        const response = await api.get(endpoint, {
+            params: {
+                limit,
+                offset,
+                ...(hasSearch ? { q: search } : {}),
+            },
+        })
+        return response.data
+    },
+
+    restore: async (id: number): Promise<void> => {
+        await api.post(`/api/customers/${id}/restore`)
+    },
+
+    permanentlyDelete: async (id: number): Promise<void> => {
+        await api.delete(`/api/customers/${id}/permanent`)
+    },
 }

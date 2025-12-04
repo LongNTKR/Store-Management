@@ -66,9 +66,11 @@ export function InvoiceDetailsDialog({
                                     <span className={`ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium 
                                         ${invoice.status === 'paid' ? 'bg-emerald-100 text-emerald-800' :
                                             invoice.status === 'pending' ? 'bg-amber-100 text-amber-800' :
-                                                'bg-gray-100 text-gray-800'}`}>
+                                                invoice.status === 'processing' ? 'bg-blue-100 text-blue-800' :
+                                                    'bg-gray-100 text-gray-800'}`}>
                                         {invoice.status === 'paid' ? 'Đã thanh toán' :
-                                            invoice.status === 'pending' ? 'Chưa thanh toán' : 'Đã hủy'}
+                                            invoice.status === 'pending' ? 'Chưa thanh toán' :
+                                                invoice.status === 'processing' ? 'Chờ xử lý' : 'Đã hủy'}
                                     </span>
                                 </p>
                                 {invoice.payment_method && (

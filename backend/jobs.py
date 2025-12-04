@@ -5,7 +5,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 from database import DatabaseManager
 from config import Config
-from services import ProductService
+from services import ProductService, InvoiceService
 
 logger = logging.getLogger(__name__)
 
@@ -30,3 +30,24 @@ def cleanup_old_deletions():
         session.close()
     except Exception as e:
         logger.error(f"Error during auto-cleanup job: {str(e)}", exc_info=True)
+
+
+def cleanup_processing_invoices(max_age_hours: int = 24):
+    """
+    Background job to remove 'processing' invoices older than the allowed window.
+    """
+    try:
+        db_manager = DatabaseManager(Config.DATABASE_PATH)
+        session = db_manager.get_session()
+
+        invoice_service = InvoiceService(session, Config.INVOICE_DIR)
+        deleted = invoice_service.cleanup_processing_invoices(max_age_hours=max_age_hours)
+
+        if deleted > 0:
+            logger.info(f"Auto-cleanup: Deleted {deleted} stale processing invoices older than {max_age_hours}h")
+        else:
+            logger.debug("Auto-cleanup: No stale processing invoices to remove")
+
+        session.close()
+    except Exception as e:
+        logger.error(f"Error during processing-invoice cleanup job: {str(e)}", exc_info=True)

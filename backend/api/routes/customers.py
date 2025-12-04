@@ -44,6 +44,42 @@ async def search_customers(q: str, limit: int = 30, offset: int = 0, db: Session
     }
 
 
+@router.get("/customers/trash/list", response_model=PaginatedResponse[Customer])
+async def get_trash_customers(limit: int = 30, offset: int = 0, db: Session = Depends(get_db)):
+    """Get deleted customers with pagination"""
+    customer_service = CustomerService(db)
+    items, total, has_more, next_offset = customer_service.get_trash_customers_paginated(
+        limit=limit,
+        offset=offset,
+    )
+    return {
+        "items": items,
+        "total": total,
+        "has_more": has_more,
+        "next_offset": next_offset,
+    }
+
+
+@router.get("/customers/trash/search", response_model=PaginatedResponse[Customer])
+async def search_trash_customers(q: str, limit: int = 30, offset: int = 0, db: Session = Depends(get_db)):
+    """Search deleted customers with pagination"""
+    if not q or not q.strip():
+        return {"items": [], "total": 0, "has_more": False, "next_offset": None}
+
+    customer_service = CustomerService(db)
+    items, total, has_more, next_offset = customer_service.search_trash_customers_paginated(
+        query=q,
+        limit=limit,
+        offset=offset,
+    )
+    return {
+        "items": items,
+        "total": total,
+        "has_more": has_more,
+        "next_offset": next_offset,
+    }
+
+
 @router.get("/customers/{customer_id}", response_model=Customer)
 async def get_customer(customer_id: int, db: Session = Depends(get_db)):
     """Get customer by ID"""
@@ -101,3 +137,23 @@ async def get_customer_stats(customer_id: int, db: Session = Depends(get_db)):
     customer_service = CustomerService(db)
     stats = customer_service.get_customer_stats(customer_id)
     return stats
+
+
+@router.post("/customers/{customer_id}/restore")
+async def restore_customer(customer_id: int, db: Session = Depends(get_db)):
+    """Restore a deleted customer"""
+    customer_service = CustomerService(db)
+    success = customer_service.restore_customer(customer_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    return {"message": "Customer restored successfully"}
+
+
+@router.delete("/customers/{customer_id}/permanent")
+async def permanently_delete_customer(customer_id: int, db: Session = Depends(get_db)):
+    """Permanently delete a customer"""
+    customer_service = CustomerService(db)
+    success = customer_service.permanently_delete_customer(customer_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    return {"message": "Customer permanently deleted"}

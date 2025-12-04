@@ -51,6 +51,7 @@ export function useDeleteCustomer() {
         mutationFn: (id: number) => customerService.delete(id),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['customers'] })
+            queryClient.invalidateQueries({ queryKey: ['trash-customers'] })
         },
     })
 }
