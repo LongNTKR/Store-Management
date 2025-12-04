@@ -65,5 +65,5 @@ async def get_dashboard_data(db: Session = Depends(get_db)):
             invoices,
             key=lambda x: x.created_at,
             reverse=True
-        )[:5],
+        )[:3],
     )

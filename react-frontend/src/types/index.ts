@@ -27,6 +27,24 @@ export interface Customer {
     is_active: boolean
 }
 
+export interface InvoiceItemCreate {
+    product_id: number
+    quantity: number
+}
+
+export interface InvoiceCreate {
+    items: InvoiceItemCreate[]
+    customer_id?: number
+    customer_name?: string
+    customer_phone?: string
+    customer_address?: string
+    discount: number
+    tax: number
+    payment_method?: string
+    notes?: string
+    status: 'pending' | 'paid' | 'cancelled'
+}
+
 export interface Invoice {
     id: number
     invoice_number: string
@@ -43,6 +61,7 @@ export interface Invoice {
     notes?: string
     created_at: string
     updated_at: string
+    items: InvoiceItem[]
 }
 
 export interface InvoiceItem {

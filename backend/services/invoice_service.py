@@ -4,18 +4,48 @@ import os
 from typing import List, Optional, Dict, Tuple
 from datetime import datetime
 from sqlalchemy.orm import Session
-from sqlalchemy import and_
+from sqlalchemy import and_, or_
+import pytz
 
 from database.models import Invoice, InvoiceItem, Product, Customer
+
+# UTC+7 timezone for Vietnam
+VN_TZ = pytz.timezone('Asia/Ho_Chi_Minh')
+
+def get_vn_time():
+    """Get current time in Vietnam timezone (UTC+7)."""
+    return datetime.now(VN_TZ)
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 import openpyxl
 from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
+
+# Register fonts for Vietnamese support
+try:
+    pdfmetrics.registerFont(TTFont('DejaVuSans', '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'))
+    pdfmetrics.registerFont(TTFont('DejaVuSans-Bold', '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'))
+    
+    # Register font family to support <b> and <i> tags automatically
+    from reportlab.pdfbase import pdfmetrics
+    pdfmetrics.registerFontFamily(
+        'DejaVuSans',
+        normal='DejaVuSans',
+        bold='DejaVuSans-Bold',
+        italic='DejaVuSans',  # Fallback
+        boldItalic='DejaVuSans-Bold' # Fallback
+    )
+
+    FONT_NORMAL = 'DejaVuSans'
+    FONT_BOLD = 'DejaVuSans-Bold'
+except Exception as e:
+    print(f"Warning: Could not load DejaVuSans fonts: {e}. Fallback to Helvetica.")
+    FONT_NORMAL = 'Helvetica'
+    FONT_BOLD = 'Helvetica-Bold'
 
 
 class InvoiceService:
@@ -35,12 +65,12 @@ class InvoiceService:
 
     def generate_invoice_number(self) -> str:
         """
-        Generate a unique invoice number.
+        Generate a unique invoice number using Vietnam timezone (UTC+7).
 
         Returns:
             Invoice number in format INV-YYYYMMDD-XXXX
         """
-        today = datetime.now().strftime("%Y%m%d")
+        today = get_vn_time().strftime("%Y%m%d")
         prefix = f"INV-{today}"
 
         # Count invoices created today
@@ -157,9 +187,23 @@ class InvoiceService:
         customer_id: Optional[int] = None,
         status: Optional[str] = None,
         start_date: Optional[datetime] = None,
-        end_date: Optional[datetime] = None
+        end_date: Optional[datetime] = None,
+        invoice_number: Optional[str] = None,
+        customer_name: Optional[str] = None,
+        customer_phone: Optional[str] = None
     ) -> List[Invoice]:
-        """Search invoices with filters. Uses joinedload to prevent N+1 queries."""
+        """
+        Search invoices with filters. Uses joinedload to prevent N+1 queries.
+        
+        Args:
+            customer_id: Filter by customer ID
+            status: Filter by invoice status
+            start_date: Filter by start date
+            end_date: Filter by end date
+            invoice_number: Search by invoice number (partial match)
+            customer_name: Search by customer name (case-insensitive partial match)
+            customer_phone: Search by customer phone (partial match)
+        """
         from sqlalchemy.orm import joinedload
 
         filters = []
@@ -176,6 +220,21 @@ class InvoiceService:
         if end_date:
             filters.append(Invoice.created_at <= end_date)
 
+        # Search filters - use OR logic for search fields
+        search_filters = []
+        if invoice_number:
+            search_filters.append(Invoice.invoice_number.like(f"%{invoice_number}%"))
+
+        if customer_name:
+            search_filters.append(Invoice.customer_name.ilike(f"%{customer_name}%"))
+
+        if customer_phone:
+            search_filters.append(Invoice.customer_phone.like(f"%{customer_phone}%"))
+
+        # Add OR search filters if any
+        if search_filters:
+            filters.append(or_(*search_filters))
+
         query = self.db.query(Invoice)
 
         # Eagerly load invoice items to prevent N+1 queries
@@ -187,20 +246,42 @@ class InvoiceService:
         return query.order_by(Invoice.created_at.desc()).all()
 
     def update_invoice_status(self, invoice_id: int, status: str) -> Optional[Invoice]:
-        """Update invoice status."""
+        """
+        Update invoice status.
+        
+        Business rule: Only invoices with 'pending' status can be updated.
+        Once an invoice is marked as 'paid' or 'cancelled', it cannot be changed.
+        
+        Args:
+            invoice_id: Invoice ID
+            status: New status (pending, paid, cancelled)
+            
+        Returns:
+            Updated invoice or None if not found
+            
+        Raises:
+            ValueError: If trying to update a finalized invoice (paid or cancelled)
+        """
         invoice = self.get_invoice(invoice_id)
         if not invoice:
             return None
+        
+        # Business rule: Only pending invoices can have their status changed
+        if invoice.status in ['paid', 'cancelled']:
+            raise ValueError(
+                f"Cannot update status of {invoice.status} invoice. "
+                "Only pending invoices can be updated."
+            )
 
         invoice.status = status
-        invoice.updated_at = datetime.utcnow()
+        invoice.updated_at = get_vn_time()
 
         self.db.commit()
         self.db.refresh(invoice)
 
         return invoice
 
-    def generate_pdf(self, invoice_id: int, company_name: str = "Cửa Hàng Gia Đình") -> str:
+    def generate_pdf(self, invoice_id: int, company_name: str = "Voi Store") -> str:
         """
         Generate PDF invoice.
 
@@ -228,6 +309,7 @@ class InvoiceService:
         title_style = ParagraphStyle(
             'CustomTitle',
             parent=styles['Heading1'],
+            fontName=FONT_BOLD,
             fontSize=24,
             textColor=colors.HexColor('#2C3E50'),
             spaceAfter=30,
@@ -239,7 +321,12 @@ class InvoiceService:
         elements.append(Spacer(1, 12))
 
         # Invoice info
-        info_style = styles['Normal']
+        info_style = ParagraphStyle(
+            'InfoStyle',
+            parent=styles['Normal'],
+            fontName=FONT_NORMAL,
+            fontSize=10
+        )
         elements.append(Paragraph(f"<b>Số hóa đơn:</b> {invoice.invoice_number}", info_style))
         elements.append(Paragraph(f"<b>Ngày:</b> {invoice.created_at.strftime('%d/%m/%Y %H:%M')}", info_style))
 
@@ -264,29 +351,68 @@ class InvoiceService:
                 item.unit,
                 f"{item.subtotal:,.0f}"
             ])
+        
+        # Calculate number of item rows for grid styling
+        num_items = len(invoice.items)
 
         # Add totals
-        table_data.append(['', '', '', '', 'Tạm tính:', f"{invoice.subtotal:,.0f}"])
+        # We place the label in the first column and will merge columns 0-4
+        row_idx = num_items + 1
+        footer_styles = []
+
+        # Subtotal
+        table_data.append(['Tạm tính:', '', '', '', '', f"{invoice.subtotal:,.0f}"])
+        footer_styles.append(('SPAN', (0, row_idx), (4, row_idx)))
+        footer_styles.append(('ALIGN', (0, row_idx), (4, row_idx), 'RIGHT'))
+        row_idx += 1
+
         if invoice.discount > 0:
-            table_data.append(['', '', '', '', 'Giảm giá:', f"-{invoice.discount:,.0f}"])
+            table_data.append(['Giảm giá:', '', '', '', '', f"-{invoice.discount:,.0f}"])
+            footer_styles.append(('SPAN', (0, row_idx), (4, row_idx)))
+            footer_styles.append(('ALIGN', (0, row_idx), (4, row_idx), 'RIGHT'))
+            row_idx += 1
+
         if invoice.tax > 0:
-            table_data.append(['', '', '', '', 'Thuế:', f"{invoice.tax:,.0f}"])
-        table_data.append(['', '', '', '', '<b>Tổng cộng:</b>', f"<b>{invoice.total:,.0f} VNĐ</b>"])
+            table_data.append(['Thuế:', '', '', '', '', f"{invoice.tax:,.0f}"])
+            footer_styles.append(('SPAN', (0, row_idx), (4, row_idx)))
+            footer_styles.append(('ALIGN', (0, row_idx), (4, row_idx), 'RIGHT'))
+            row_idx += 1
+        
+        # Total
+        # Use Paragraph for the total row to support HTML tags like <b>
+        table_data.append([
+            Paragraph('<b>Tổng cộng:</b>', info_style), '', '', '', '', 
+            Paragraph(f"<b>{invoice.total:,.0f} VNĐ</b>", info_style)
+        ])
+        footer_styles.append(('SPAN', (0, row_idx), (4, row_idx)))
+        footer_styles.append(('ALIGN', (0, row_idx), (4, row_idx), 'RIGHT'))
+        # Add top border for Total row
+        footer_styles.append(('LINEABOVE', (0, row_idx), (-1, row_idx), 1, colors.black))
+        footer_styles.append(('BOTTOMPADDING', (0, row_idx), (-1, row_idx), 15)) # Add some padding
+        footer_styles.append(('TOPPADDING', (0, row_idx), (-1, row_idx), 10))
 
         table = Table(table_data, colWidths=[30, 180, 70, 30, 60, 80])
-        table.setStyle(TableStyle([
+        
+        # Base styles
+        table_styles = [
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3498DB')),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTNAME', (0, 0), (-1, 0), FONT_BOLD),
             ('FONTSIZE', (0, 0), (-1, 0), 12),
             ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (0, 1), (-1, -4), colors.beige),
-            ('GRID', (0, 0), (-1, -4), 1, colors.black),
-            ('ALIGN', (2, 1), (-1, -1), 'RIGHT'),
-            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+            ('BACKGROUND', (0, 1), (-1, num_items), colors.beige),
+            ('GRID', (0, 0), (-1, num_items), 1, colors.black),
+            ('ALIGN', (2, 1), (-1, -1), 'RIGHT'), # Right align prices and totals
+            ('FONTNAME', (0, -1), (-1, -1), FONT_BOLD),
             ('FONTSIZE', (0, -1), (-1, -1), 12),
-        ]))
+            ('FONTNAME', (0, 1), (-1, -2), FONT_NORMAL),
+        ]
+        
+        # Add footer styles
+        table_styles.extend(footer_styles)
+        
+        table.setStyle(TableStyle(table_styles))
 
         elements.append(table)
         elements.append(Spacer(1, 20))
@@ -296,11 +422,28 @@ class InvoiceService:
             elements.append(Paragraph(f"<b>Ghi chú:</b> {invoice.notes}", info_style))
 
         # Build PDF
-        doc.build(elements)
+        def draw_watermark(canvas, doc):
+            """Draw watermark on PDF page."""
+            canvas.saveState()
+            logo_path = "/home/longnt/Documents/Store-Management/react-frontend/public/Image_bqzqd5bqzqd5bqzq.png"
+            if os.path.exists(logo_path):
+                # Center of A4 page
+                page_width, page_height = A4
+                image_width = 100 * mm
+                image_height = 100 * mm
+                x = (page_width - image_width) / 2
+                y = (page_height - image_height) / 2
+                
+                canvas.setFillAlpha(0.1) # Transparency
+                canvas.drawImage(logo_path, x, y, width=image_width, height=image_height, mask='auto', preserveAspectRatio=True)
+                
+            canvas.restoreState()
+
+        doc.build(elements, onFirstPage=draw_watermark, onLaterPages=draw_watermark)
 
         return pdf_path
 
-    def generate_excel(self, invoice_id: int, company_name: str = "Cửa Hàng Gia Đình") -> str:
+    def generate_excel(self, invoice_id: int, company_name: str = "Voi Store") -> str:
         """
         Generate Excel invoice.
 
@@ -414,7 +557,7 @@ class InvoiceService:
 
         return excel_path
 
-    def print_invoice(self, invoice_id: int, company_name: str = "Cửa Hàng Gia Đình"):
+    def print_invoice(self, invoice_id: int, company_name: str = "Voi Store"):
         """
         Print invoice (generates PDF and opens it).
 

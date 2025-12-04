@@ -1,14 +1,17 @@
+import { useState } from 'react'
 import { useDashboard } from '../hooks/useDashboard'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { Package, Users, FileText, DollarSign, Upload, PlusCircle, FilePlus } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import { CreateInvoiceDialog } from '@/components/invoices/CreateInvoiceDialog'
 import type { Invoice } from '@/types'
 
 export function HomePage() {
     const { data: dashboard } = useDashboard()
     const navigate = useNavigate()
+    const [showCreateInvoiceDialog, setShowCreateInvoiceDialog] = useState(false)
 
     // Extract data from unified dashboard response
     const stats = dashboard?.stats
@@ -81,7 +84,7 @@ export function HomePage() {
                 </Card>
             ) : (
                 <div className="space-y-4">
-                    {invoices.slice(0, 5).map((invoice) => (
+                    {invoices.slice(0, 3).map((invoice) => (
                         <Card key={invoice.id} className="transition-shadow hover:shadow-md">
                             <CardContent className="flex items-center justify-between gap-4 pt-6">
                                 <div>
@@ -112,10 +115,16 @@ export function HomePage() {
                 <Button variant="outline" className="justify-start gap-2" onClick={() => navigate('/import')}>
                     <Upload className="h-4 w-4" /> Nhập báo giá
                 </Button>
-                <Button variant="outline" className="justify-start gap-2" onClick={() => navigate('/invoices')}>
-                    <FilePlus className="h-4 w-4" /> Xem hóa đơn
+                <Button variant="outline" className="justify-start gap-2" onClick={() => setShowCreateInvoiceDialog(true)}>
+                    <FilePlus className="h-4 w-4" /> Tạo hóa đơn
                 </Button>
             </div>
+
+            {/* Create Invoice Dialog */}
+            <CreateInvoiceDialog
+                open={showCreateInvoiceDialog}
+                onOpenChange={setShowCreateInvoiceDialog}
+            />
         </div>
     )
 }

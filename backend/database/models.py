@@ -8,8 +8,16 @@ from sqlalchemy import (
 )
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
+import pytz
 
 Base = declarative_base()
+
+# UTC+7 timezone for Vietnam
+VN_TZ = pytz.timezone('Asia/Ho_Chi_Minh')
+
+def get_vn_time():
+    """Get current time in Vietnam timezone (UTC+7)."""
+    return datetime.now(VN_TZ)
 
 
 class Product(Base):
@@ -29,9 +37,9 @@ class Product(Base):
     # Images stored as comma-separated paths
     image_paths = Column(Text, nullable=True)  # "path1.jpg,path2.jpg,path3.jpg"
 
-    # Metadata
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    # Metadata (using UTC+7 timezone)
+    created_at = Column(DateTime, default=get_vn_time)
+    updated_at = Column(DateTime, default=get_vn_time, onupdate=get_vn_time)
     is_active = Column(Boolean, default=True)
     deleted_at = Column(DateTime, nullable=True, index=True)  # NULL = active, timestamp = deleted
 
@@ -82,9 +90,9 @@ class Customer(Base):
     address = Column(Text, nullable=True)
     notes = Column(Text, nullable=True)
 
-    # Metadata
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    # Metadata (using UTC+7 timezone)
+    created_at = Column(DateTime, default=get_vn_time)
+    updated_at = Column(DateTime, default=get_vn_time, onupdate=get_vn_time)
     is_active = Column(Boolean, default=True)
 
     # Relationships
@@ -121,9 +129,9 @@ class Invoice(Base):
     # Notes
     notes = Column(Text, nullable=True)
 
-    # Metadata
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    # Metadata (using UTC+7 timezone)
+    created_at = Column(DateTime, default=get_vn_time, index=True)
+    updated_at = Column(DateTime, default=get_vn_time, onupdate=get_vn_time)
 
     # Relationships
     customer = relationship('Customer', back_populates='invoices')
@@ -170,7 +178,7 @@ class PriceHistory(Base):
     old_price = Column(Float, nullable=False)
     new_price = Column(Float, nullable=False)
 
-    changed_at = Column(DateTime, default=datetime.utcnow, index=True)
+    changed_at = Column(DateTime, default=get_vn_time, index=True)
     reason = Column(String(255), nullable=True)  # e.g., "Price update from supplier"
 
     # Relationships
