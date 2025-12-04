@@ -1,20 +1,47 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import List
-
 from api.dependencies import get_db
-from schemas.customer import Customer, CustomerCreate, CustomerStats
+from schemas.customer import Customer, CustomerCreate, CustomerUpdate, CustomerStats
+from schemas.common import PaginatedResponse
 from services import CustomerService
 
 router = APIRouter()
 
 
-@router.get("/customers", response_model=List[Customer])
-async def get_customers(db: Session = Depends(get_db)):
-    """Get all customers"""
+@router.get("/customers", response_model=PaginatedResponse[Customer])
+async def get_customers(limit: int = 30, offset: int = 0, db: Session = Depends(get_db)):
+    """Get customers with pagination"""
     customer_service = CustomerService(db)
-    customers = customer_service.get_all_customers()
-    return customers
+    items, total, has_more, next_offset = customer_service.get_customers_paginated(
+        limit=limit,
+        offset=offset,
+    )
+    return {
+        "items": items,
+        "total": total,
+        "has_more": has_more,
+        "next_offset": next_offset,
+    }
+
+
+@router.get("/customers/search", response_model=PaginatedResponse[Customer])
+async def search_customers(q: str, limit: int = 30, offset: int = 0, db: Session = Depends(get_db)):
+    """Search customers by query with pagination"""
+    if not q or not q.strip():
+        return {"items": [], "total": 0, "has_more": False, "next_offset": None}
+
+    customer_service = CustomerService(db)
+    items, total, has_more, next_offset = customer_service.search_customers_paginated(
+        query=q,
+        limit=limit,
+        offset=offset,
+    )
+    return {
+        "items": items,
+        "total": total,
+        "has_more": has_more,
+        "next_offset": next_offset,
+    }
 
 
 @router.get("/customers/{customer_id}", response_model=Customer)
@@ -25,14 +52,6 @@ async def get_customer(customer_id: int, db: Session = Depends(get_db)):
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
     return customer
-
-
-@router.get("/customers/search", response_model=List[Customer])
-async def search_customers(q: str, db: Session = Depends(get_db)):
-    """Search customers by query"""
-    customer_service = CustomerService(db)
-    customers = customer_service.search_customers(query=q)
-    return customers
 
 
 @router.post("/customers", response_model=Customer)
@@ -47,6 +66,23 @@ async def create_customer(customer: CustomerCreate, db: Session = Depends(get_db
         notes=customer.notes,
     )
     return new_customer
+
+
+@router.put("/customers/{customer_id}", response_model=Customer)
+async def update_customer(customer_id: int, customer: CustomerUpdate, db: Session = Depends(get_db)):
+    """Update customer information"""
+    customer_service = CustomerService(db)
+    updated_customer = customer_service.update_customer(
+        customer_id=customer_id,
+        name=customer.name,
+        phone=customer.phone,
+        email=customer.email,
+        address=customer.address,
+        notes=customer.notes,
+    )
+    if not updated_customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    return updated_customer
 
 
 @router.delete("/customers/{customer_id}")

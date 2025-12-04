@@ -5,11 +5,12 @@ import { Input } from '../ui/input'
 import { Label } from '../ui/label'
 import { Textarea } from '../ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
-import { useCreateInvoice } from '../../hooks/useInvoices'
+import { SearchHighlight } from '../shared/SearchHighlight'
+import { useCreateInvoice, useUpdateInvoice } from '../../hooks/useInvoices'
 import { useCustomers } from '../../hooks/useCustomers'
 import { useProductSearch } from '../../hooks/useProducts'
-import type { Product, InvoiceItemCreate } from '../../types'
-import { Trash2, Search, Plus } from 'lucide-react'
+import type { Product, InvoiceItemCreate, Invoice } from '../../types'
+import { Trash2, Search, Plus, Check, X } from 'lucide-react'
 import { useDebounce } from '../../hooks/useDebounce'
 
 interface LineItem {
@@ -20,9 +21,16 @@ interface LineItem {
 interface CreateInvoiceDialogProps {
     open: boolean
     onOpenChange: (open: boolean) => void
+    mode?: 'create' | 'edit'
+    invoiceToEdit?: Invoice | null
 }
 
-export function CreateInvoiceDialog({ open, onOpenChange }: CreateInvoiceDialogProps) {
+export function CreateInvoiceDialog({
+    open,
+    onOpenChange,
+    mode = 'create',
+    invoiceToEdit,
+}: CreateInvoiceDialogProps) {
     // Customer type toggle
     const [customerType, setCustomerType] = useState<'registered' | 'walk-in'>('walk-in')
 
@@ -45,11 +53,18 @@ export function CreateInvoiceDialog({ open, onOpenChange }: CreateInvoiceDialogP
     const [paymentMethod, setPaymentMethod] = useState<string>('')
     const [status, setStatus] = useState<'pending' | 'paid'>('pending')
     const [notes, setNotes] = useState('')
+    const isEditMode = mode === 'edit' && !!invoiceToEdit
 
     // Hooks
     const createInvoiceMutation = useCreateInvoice()
-    const { data: customers = [] } = useCustomers()
+    const updateInvoiceMutation = useUpdateInvoice()
+    const { data: customerPages } = useCustomers()
+    const customers = useMemo(
+        () => customerPages?.pages.flatMap((page) => page.items) ?? [],
+        [customerPages]
+    )
     const { data: searchResults = [] } = useProductSearch(debouncedSearchQuery)
+    const isSubmitting = isEditMode ? updateInvoiceMutation.isPending : createInvoiceMutation.isPending
 
     // Update customer info when selecting registered customer
     useEffect(() => {
@@ -62,6 +77,40 @@ export function CreateInvoiceDialog({ open, onOpenChange }: CreateInvoiceDialogP
             }
         }
     }, [selectedCustomerId, customers, customerType])
+
+    // Prefill form when editing a pending invoice
+    useEffect(() => {
+        if (isEditMode && invoiceToEdit && open) {
+            setCustomerType(invoiceToEdit.customer_id ? 'registered' : 'walk-in')
+            setSelectedCustomerId(invoiceToEdit.customer_id || undefined)
+            setCustomerName(invoiceToEdit.customer_name || '')
+            setCustomerPhone(invoiceToEdit.customer_phone || '')
+            setCustomerAddress(invoiceToEdit.customer_address || '')
+            setProductSearchQuery('')
+            setDiscount(invoiceToEdit.discount || 0)
+            setTax(invoiceToEdit.tax || 0)
+            setPaymentMethod(invoiceToEdit.payment_method || '')
+            setStatus(invoiceToEdit.status === 'paid' ? 'paid' : 'pending')
+            setNotes(invoiceToEdit.notes || '')
+
+            const mappedItems: LineItem[] = (invoiceToEdit.items || []).map((item) => ({
+                product: {
+                    id: item.product_id ?? -item.id,
+                    name: item.product_name,
+                    price: item.product_price,
+                    unit: item.unit,
+                    stock_quantity: 0,
+                    created_at: invoiceToEdit.created_at,
+                    updated_at: invoiceToEdit.updated_at,
+                    is_active: true,
+                } as Product,
+                quantity: item.quantity,
+            }))
+            setLineItems(mappedItems)
+        } else if (!open && mode === 'create') {
+            resetForm()
+        }
+    }, [isEditMode, invoiceToEdit, open, mode])
 
     // Calculate totals
     const subtotal = useMemo(() => {
@@ -88,8 +137,6 @@ export function CreateInvoiceDialog({ open, onOpenChange }: CreateInvoiceDialogP
             // Add new item
             setLineItems([...lineItems, { product, quantity: 1 }])
         }
-        // Clear search after adding
-        setProductSearchQuery('')
     }
 
     // Update quantity
@@ -158,17 +205,26 @@ export function CreateInvoiceDialog({ open, onOpenChange }: CreateInvoiceDialogP
             discount,
             tax,
             payment_method: paymentMethod || undefined,
-            notes: notes || undefined,
-            status
+            notes: notes || undefined
         }
 
         try {
-            await createInvoiceMutation.mutateAsync(invoiceData)
-            resetForm()
+            if (isEditMode && invoiceToEdit) {
+                await updateInvoiceMutation.mutateAsync({
+                    id: invoiceToEdit.id,
+                    invoice: invoiceData
+                })
+            } else {
+                await createInvoiceMutation.mutateAsync({
+                    ...invoiceData,
+                    status
+                })
+                resetForm()
+            }
             onOpenChange(false)
         } catch (error) {
             // Error is handled by the mutation's onError
-            console.error('Error creating invoice:', error)
+            console.error('Error saving invoice:', error)
         }
     }
 
@@ -176,290 +232,329 @@ export function CreateInvoiceDialog({ open, onOpenChange }: CreateInvoiceDialogP
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
-                    <DialogTitle>Tạo Hóa Đơn Mới</DialogTitle>
+                    <DialogTitle>{isEditMode ? 'Chỉnh sửa hóa đơn' : 'Tạo Hóa Đơn Mới'}</DialogTitle>
                 </DialogHeader>
 
                 <form onSubmit={handleSubmit} className="space-y-6">
-                    {/* Customer Type Toggle */}
-                    <div className="space-y-2">
-                        <Label>Loại khách hàng</Label>
-                        <div className="flex gap-4">
-                            <Button
-                                type="button"
-                                variant={customerType === 'walk-in' ? 'default' : 'outline'}
-                                onClick={() => {
-                                    setCustomerType('walk-in')
-                                    setSelectedCustomerId(undefined)
-                                    setCustomerName('')
-                                    setCustomerPhone('')
-                                    setCustomerAddress('')
-                                }}
-                            >
-                                Khách vãng lai
-                            </Button>
-                            <Button
-                                type="button"
-                                variant={customerType === 'registered' ? 'default' : 'outline'}
-                                onClick={() => setCustomerType('registered')}
-                            >
-                                Khách hàng đã đăng ký
-                            </Button>
-                        </div>
-                    </div>
-
-                    {/* Customer Info */}
-                    <div className="grid grid-cols-2 gap-4">
-                        {customerType === 'registered' ? (
-                            <div className="col-span-2">
-                                <Label htmlFor="customer-select">Chọn khách hàng</Label>
-                                <Select
-                                    value={selectedCustomerId?.toString()}
-                                    onValueChange={(value) => setSelectedCustomerId(Number(value))}
-                                >
-                                    <SelectTrigger id="customer-select">
-                                        <SelectValue placeholder="Chọn khách hàng..." />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {customers.map(customer => (
-                                            <SelectItem key={customer.id} value={customer.id.toString()}>
-                                                {customer.name} - {customer.phone || 'Không có SĐT'}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
+                    <div className="grid gap-6 lg:grid-cols-[1.35fr_1fr]">
+                        <div className="space-y-6">
+                            {/* Customer Type Toggle */}
+                            <div className="space-y-2">
+                                <Label>Loại khách hàng</Label>
+                                <div className="flex gap-4">
+                                    <Button
+                                        type="button"
+                                        variant={customerType === 'walk-in' ? 'default' : 'outline'}
+                                        onClick={() => {
+                                            setCustomerType('walk-in')
+                                            setSelectedCustomerId(undefined)
+                                            setCustomerName('')
+                                            setCustomerPhone('')
+                                            setCustomerAddress('')
+                                        }}
+                                    >
+                                        Khách vãng lai
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant={customerType === 'registered' ? 'default' : 'outline'}
+                                        onClick={() => setCustomerType('registered')}
+                                    >
+                                        Khách hàng đã đăng ký
+                                    </Button>
+                                </div>
                             </div>
-                        ) : null}
 
-                        <div>
-                            <Label htmlFor="customer-name">Tên khách hàng *</Label>
-                            <Input
-                                id="customer-name"
-                                value={customerName}
-                                onChange={(e) => setCustomerName(e.target.value)}
-                                placeholder="Nhập tên khách hàng"
-                                disabled={customerType === 'registered' && !!selectedCustomerId}
-                                required
-                            />
-                        </div>
+                            {/* Customer Info */}
+                            <div className="grid grid-cols-2 gap-4">
+                                {customerType === 'registered' ? (
+                                    <div className="col-span-2">
+                                        <Label htmlFor="customer-select">Chọn khách hàng</Label>
+                                        <Select
+                                            value={selectedCustomerId?.toString()}
+                                            onValueChange={(value) => setSelectedCustomerId(Number(value))}
+                                        >
+                                            <SelectTrigger id="customer-select">
+                                                <SelectValue placeholder="Chọn khách hàng..." />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {customers.map(customer => (
+                                                    <SelectItem key={customer.id} value={customer.id.toString()}>
+                                                        {customer.name} - {customer.phone || 'Không có SĐT'}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                ) : null}
 
-                        <div>
-                            <Label htmlFor="customer-phone">Số điện thoại</Label>
-                            <Input
-                                id="customer-phone"
-                                value={customerPhone}
-                                onChange={(e) => setCustomerPhone(e.target.value)}
-                                placeholder="Nhập số điện thoại"
-                                disabled={customerType === 'registered' && !!selectedCustomerId}
-                            />
-                        </div>
+                                <div>
+                                    <Label htmlFor="customer-name">Tên khách hàng *</Label>
+                                    <Input
+                                        id="customer-name"
+                                        value={customerName}
+                                        onChange={(e) => setCustomerName(e.target.value)}
+                                        placeholder="Nhập tên khách hàng"
+                                        disabled={customerType === 'registered' && !!selectedCustomerId}
+                                        required
+                                    />
+                                </div>
 
-                        <div className="col-span-2">
-                            <Label htmlFor="customer-address">Địa chỉ</Label>
-                            <Input
-                                id="customer-address"
-                                value={customerAddress}
-                                onChange={(e) => setCustomerAddress(e.target.value)}
-                                placeholder="Nhập địa chỉ"
-                                disabled={customerType === 'registered' && !!selectedCustomerId}
-                            />
-                        </div>
-                    </div>
+                                <div>
+                                    <Label htmlFor="customer-phone">Số điện thoại</Label>
+                                    <Input
+                                        id="customer-phone"
+                                        value={customerPhone}
+                                        onChange={(e) => setCustomerPhone(e.target.value)}
+                                        placeholder="Nhập số điện thoại"
+                                        disabled={customerType === 'registered' && !!selectedCustomerId}
+                                    />
+                                </div>
 
-                    {/* Product Search */}
-                    <div className="space-y-2">
-                        <Label htmlFor="product-search">Tìm kiếm sản phẩm</Label>
-                        <div className="relative">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                            <Input
-                                id="product-search"
-                                value={productSearchQuery}
-                                onChange={(e) => setProductSearchQuery(e.target.value)}
-                                placeholder="Tìm kiếm theo tên sản phẩm..."
-                                className="pl-10"
-                            />
-                        </div>
-
-                        {/* Product Search Results Table */}
-                        {productSearchQuery && searchResults.length > 0 && (
-                            <div className="border rounded-lg max-h-60 overflow-y-auto">
-                                <table className="w-full">
-                                    <thead className="bg-muted sticky top-0">
-                                        <tr>
-                                            <th className="text-left p-2 text-sm font-medium">Sản phẩm</th>
-                                            <th className="text-right p-2 text-sm font-medium">Giá</th>
-                                            <th className="text-center p-2 text-sm font-medium">Đơn vị</th>
-                                            <th className="text-center p-2 text-sm font-medium">Tồn kho</th>
-                                            <th className="text-center p-2 text-sm font-medium"></th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {searchResults.map(product => (
-                                            <tr
-                                                key={product.id}
-                                                className="border-t hover:bg-muted/50 cursor-pointer"
-                                            >
-                                                <td className="p-2 text-sm">{product.name}</td>
-                                                <td className="p-2 text-sm text-right">
-                                                    {product.price.toLocaleString('vi-VN')}đ
-                                                </td>
-                                                <td className="p-2 text-sm text-center">{product.unit}</td>
-                                                <td className="p-2 text-sm text-center">{product.stock_quantity}</td>
-                                                <td className="p-2 text-center">
-                                                    <Button
-                                                        type="button"
-                                                        size="sm"
-                                                        variant="ghost"
-                                                        onClick={() => addProduct(product)}
-                                                    >
-                                                        <Plus className="h-4 w-4" />
-                                                    </Button>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                                <div className="col-span-2">
+                                    <Label htmlFor="customer-address">Địa chỉ</Label>
+                                    <Input
+                                        id="customer-address"
+                                        value={customerAddress}
+                                        onChange={(e) => setCustomerAddress(e.target.value)}
+                                        placeholder="Nhập địa chỉ"
+                                        disabled={customerType === 'registered' && !!selectedCustomerId}
+                                    />
+                                </div>
                             </div>
-                        )}
-                    </div>
 
-                    {/* Line Items */}
-                    {lineItems.length > 0 && (
-                        <div className="space-y-2">
-                            <Label>Sản phẩm trong hóa đơn</Label>
-                            <div className="border rounded-lg overflow-hidden">
-                                <table className="w-full">
-                                    <thead className="bg-muted">
-                                        <tr>
-                                            <th className="text-left p-2 text-sm font-medium">Sản phẩm</th>
-                                            <th className="text-right p-2 text-sm font-medium">Đơn giá</th>
-                                            <th className="text-center p-2 text-sm font-medium">Số lượng</th>
-                                            <th className="text-right p-2 text-sm font-medium">Thành tiền</th>
-                                            <th className="text-center p-2 text-sm font-medium"></th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
+                            {/* Financial Details */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <Label htmlFor="discount">Giảm giá (VNĐ)</Label>
+                                    <Input
+                                        id="discount"
+                                        type="number"
+                                        min="0"
+                                        value={discount}
+                                        onChange={(e) => setDiscount(Number(e.target.value))}
+                                        placeholder="0"
+                                    />
+                                </div>
+
+                                <div>
+                                    <Label htmlFor="tax">Thuế (VNĐ)</Label>
+                                    <Input
+                                        id="tax"
+                                        type="number"
+                                        min="0"
+                                        value={tax}
+                                        onChange={(e) => setTax(Number(e.target.value))}
+                                        placeholder="0"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Payment & Status */}
+                            <div className={`grid gap-4 ${isEditMode ? 'grid-cols-1' : 'grid-cols-2'}`}>
+                                <div>
+                                    <Label htmlFor="payment-method">Phương thức thanh toán</Label>
+                                    <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                                        <SelectTrigger id="payment-method">
+                                            <SelectValue placeholder="Chọn phương thức..." />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="cash">Tiền mặt</SelectItem>
+                                            <SelectItem value="transfer">Chuyển khoản</SelectItem>
+                                            <SelectItem value="card">Thẻ</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+                                {!isEditMode && (
+                                    <div>
+                                        <Label htmlFor="status">Trạng thái</Label>
+                                        <Select value={status} onValueChange={(value: 'pending' | 'paid') => setStatus(value)}>
+                                            <SelectTrigger id="status">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="pending">Chờ thanh toán</SelectItem>
+                                                <SelectItem value="paid">Đã thanh toán</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Notes */}
+                            <div>
+                                <Label htmlFor="notes">Ghi chú</Label>
+                                <Textarea
+                                    id="notes"
+                                    value={notes}
+                                    onChange={(e) => setNotes(e.target.value)}
+                                    placeholder="Nhập ghi chú (tùy chọn)"
+                                    rows={3}
+                                />
+                            </div>
+
+                            {/* Summary */}
+                            <div className="bg-muted p-4 rounded-lg space-y-2">
+                                <div className="flex justify-between text-sm">
+                                    <span>Tổng tiền hàng:</span>
+                                    <span className="font-medium">{subtotal.toLocaleString('vi-VN')}đ</span>
+                                </div>
+                                <div className="flex justify-between text-sm">
+                                    <span>Giảm giá:</span>
+                                    <span className="font-medium text-destructive">-{discount.toLocaleString('vi-VN')}đ</span>
+                                </div>
+                                <div className="flex justify-between text-sm">
+                                    <span>Thuế:</span>
+                                    <span className="font-medium">+{tax.toLocaleString('vi-VN')}đ</span>
+                                </div>
+                                <div className="flex justify-between text-lg font-bold border-t pt-2">
+                                    <span>Tổng cộng:</span>
+                                    <span className="text-primary">{total.toLocaleString('vi-VN')}đ</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Right column: search + cart */}
+                        <div className="space-y-4">
+                            <div className="relative rounded-lg border bg-background p-4 shadow-sm space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <p className="text-sm font-medium">Tìm & thêm sản phẩm</p>
+                                        <p className="text-xs text-muted-foreground">Gõ tên sản phẩm và bấm + để đưa vào giỏ</p>
+                                    </div>
+                                </div>
+
+                                <div className="relative">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                    <Input
+                                        id="product-search"
+                                        value={productSearchQuery}
+                                        onChange={(e) => setProductSearchQuery(e.target.value)}
+                                        placeholder="Tìm kiếm theo tên sản phẩm..."
+                                        className="pl-10 pr-10"
+                                    />
+                                    {productSearchQuery ? (
+                                        <button
+                                            type="button"
+                                            aria-label="Xóa tìm kiếm"
+                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                            onClick={() => setProductSearchQuery('')}
+                                        >
+                                            <X className="h-4 w-4" />
+                                        </button>
+                                    ) : null}
+                                </div>
+
+                                {productSearchQuery ? (
+                                    <div className="absolute left-0 right-0 mt-2 rounded-lg border bg-background shadow-lg max-h-80 overflow-y-auto z-20">
+                                        {searchResults.length > 0 ? (
+                                            <table className="w-full">
+                                                <thead className="bg-muted sticky top-0">
+                                                    <tr>
+                                                        <th className="text-left p-2 text-xs font-medium">Sản phẩm</th>
+                                                        <th className="text-right p-2 text-xs font-medium">Giá</th>
+                                                        <th className="text-center p-2 text-xs font-medium">Tồn</th>
+                                                        <th className="text-center p-2 text-xs font-medium"></th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {searchResults.map(product => {
+                                                        const isSelected = lineItems.some(item => item.product.id === product.id)
+                                                        return (
+                                                            <tr
+                                                                key={product.id}
+                                                                className="border-t hover:bg-muted/60"
+                                                            >
+                                                                <td className="p-2 text-sm">
+                                                                    {productSearchQuery.trim() ? (
+                                                                        <SearchHighlight text={product.name} query={productSearchQuery} />
+                                                                    ) : (
+                                                                        product.name
+                                                                    )}
+                                                                </td>
+                                                                <td className="p-2 text-sm text-right">
+                                                                    {product.price.toLocaleString('vi-VN')}đ
+                                                                </td>
+                                                                <td className="p-2 text-sm text-center">{product.stock_quantity}</td>
+                                                                <td className="p-2 text-center">
+                                                                    <Button
+                                                                        type="button"
+                                                                        size="sm"
+                                                                        variant={isSelected ? 'secondary' : 'ghost'}
+                                                                        onClick={() => addProduct(product)}
+                                                                    >
+                                                                        {isSelected ? (
+                                                                            <Check className="h-4 w-4 text-green-600" />
+                                                                        ) : (
+                                                                            <Plus className="h-4 w-4" />
+                                                                        )}
+                                                                    </Button>
+                                                                </td>
+                                                            </tr>
+                                                        )
+                                                    })}
+                                                </tbody>
+                                            </table>
+                                        ) : (
+                                            <div className="p-4 text-sm text-center text-muted-foreground">
+                                                Không tìm thấy sản phẩm phù hợp
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : null}
+                            </div>
+
+                            <div className="border rounded-lg p-4 space-y-3 bg-muted/40">
+                                <div className="flex items-center justify-between">
+                                    <p className="text-sm font-medium">Giỏ hàng</p>
+                                    <span className="text-xs text-muted-foreground">
+                                        {lineItems.length} sản phẩm
+                                    </span>
+                                </div>
+
+                                {lineItems.length > 0 ? (
+                                    <div className="space-y-3 max-h-[340px] overflow-y-auto pr-1">
                                         {lineItems.map(item => (
-                                            <tr key={item.product.id} className="border-t">
-                                                <td className="p-2 text-sm">{item.product.name}</td>
-                                                <td className="p-2 text-sm text-right">
-                                                    {item.product.price.toLocaleString('vi-VN')}đ
-                                                </td>
-                                                <td className="p-2 text-center">
-                                                    <Input
-                                                        type="number"
-                                                        min="1"
-                                                        value={item.quantity}
-                                                        onChange={(e) => updateQuantity(item.product.id, Number(e.target.value))}
-                                                        className="w-20 text-center"
-                                                    />
-                                                </td>
-                                                <td className="p-2 text-sm text-right font-medium">
-                                                    {(item.product.price * item.quantity).toLocaleString('vi-VN')}đ
-                                                </td>
-                                                <td className="p-2 text-center">
+                                            <div key={item.product.id} className="rounded-lg border bg-background p-3 shadow-sm">
+                                                <div className="flex items-start justify-between gap-3">
+                                                    <div>
+                                                        <p className="text-sm font-medium leading-tight">{item.product.name}</p>
+                                                        <p className="text-xs text-muted-foreground mt-1">
+                                                            Đơn giá: {item.product.price.toLocaleString('vi-VN')}đ
+                                                        </p>
+                                                    </div>
                                                     <Button
                                                         type="button"
-                                                        size="sm"
+                                                        size="icon"
                                                         variant="ghost"
                                                         onClick={() => removeProduct(item.product.id)}
                                                     >
                                                         <Trash2 className="h-4 w-4 text-destructive" />
                                                     </Button>
-                                                </td>
-                                            </tr>
+                                                </div>
+
+                                                <div className="mt-2 flex items-center justify-between gap-3">
+                                                    <Input
+                                                        type="number"
+                                                        min="1"
+                                                        value={item.quantity}
+                                                        onChange={(e) => updateQuantity(item.product.id, Number(e.target.value))}
+                                                        className="w-24 text-center"
+                                                    />
+                                                    <div className="text-sm font-semibold">
+                                                        {(item.product.price * item.quantity).toLocaleString('vi-VN')}đ
+                                                    </div>
+                                                </div>
+                                            </div>
                                         ))}
-                                    </tbody>
-                                </table>
+                                    </div>
+                                ) : (
+                                    <div className="p-4 text-center text-sm text-muted-foreground border border-dashed rounded-md">
+                                        Chưa có sản phẩm nào trong giỏ
+                                    </div>
+                                )}
                             </div>
-                        </div>
-                    )}
-
-                    {/* Financial Details */}
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <Label htmlFor="discount">Giảm giá (VNĐ)</Label>
-                            <Input
-                                id="discount"
-                                type="number"
-                                min="0"
-                                value={discount}
-                                onChange={(e) => setDiscount(Number(e.target.value))}
-                                placeholder="0"
-                            />
-                        </div>
-
-                        <div>
-                            <Label htmlFor="tax">Thuế (VNĐ)</Label>
-                            <Input
-                                id="tax"
-                                type="number"
-                                min="0"
-                                value={tax}
-                                onChange={(e) => setTax(Number(e.target.value))}
-                                placeholder="0"
-                            />
-                        </div>
-                    </div>
-
-                    {/* Payment & Status */}
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <Label htmlFor="payment-method">Phương thức thanh toán</Label>
-                            <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-                                <SelectTrigger id="payment-method">
-                                    <SelectValue placeholder="Chọn phương thức..." />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="cash">Tiền mặt</SelectItem>
-                                    <SelectItem value="transfer">Chuyển khoản</SelectItem>
-                                    <SelectItem value="card">Thẻ</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-
-                        <div>
-                            <Label htmlFor="status">Trạng thái</Label>
-                            <Select value={status} onValueChange={(value: 'pending' | 'paid') => setStatus(value)}>
-                                <SelectTrigger id="status">
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="pending">Chờ thanh toán</SelectItem>
-                                    <SelectItem value="paid">Đã thanh toán</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-                    </div>
-
-                    {/* Notes */}
-                    <div>
-                        <Label htmlFor="notes">Ghi chú</Label>
-                        <Textarea
-                            id="notes"
-                            value={notes}
-                            onChange={(e) => setNotes(e.target.value)}
-                            placeholder="Nhập ghi chú (tùy chọn)"
-                            rows={3}
-                        />
-                    </div>
-
-                    {/* Summary */}
-                    <div className="bg-muted p-4 rounded-lg space-y-2">
-                        <div className="flex justify-between text-sm">
-                            <span>Tổng tiền hàng:</span>
-                            <span className="font-medium">{subtotal.toLocaleString('vi-VN')}đ</span>
-                        </div>
-                        <div className="flex justify-between text-sm">
-                            <span>Giảm giá:</span>
-                            <span className="font-medium text-destructive">-{discount.toLocaleString('vi-VN')}đ</span>
-                        </div>
-                        <div className="flex justify-between text-sm">
-                            <span>Thuế:</span>
-                            <span className="font-medium">+{tax.toLocaleString('vi-VN')}đ</span>
-                        </div>
-                        <div className="flex justify-between text-lg font-bold border-t pt-2">
-                            <span>Tổng cộng:</span>
-                            <span className="text-primary">{total.toLocaleString('vi-VN')}đ</span>
                         </div>
                     </div>
 
@@ -471,15 +566,17 @@ export function CreateInvoiceDialog({ open, onOpenChange }: CreateInvoiceDialogP
                                 resetForm()
                                 onOpenChange(false)
                             }}
-                            disabled={createInvoiceMutation.isPending}
+                            disabled={isSubmitting}
                         >
                             Hủy
                         </Button>
                         <Button
                             type="submit"
-                            disabled={createInvoiceMutation.isPending || lineItems.length === 0}
+                            disabled={isSubmitting || lineItems.length === 0}
                         >
-                            {createInvoiceMutation.isPending ? 'Đang tạo...' : 'Tạo Hóa Đơn'}
+                            {isSubmitting
+                                ? isEditMode ? 'Đang lưu...' : 'Đang tạo...'
+                                : isEditMode ? 'Lưu thay đổi' : 'Tạo Hóa Đơn'}
                         </Button>
                     </DialogFooter>
                 </form>

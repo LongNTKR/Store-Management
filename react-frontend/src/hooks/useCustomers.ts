@@ -1,19 +1,23 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { customerService } from '../services/customers'
 import type { Customer } from '../types'
 
-export function useCustomers() {
-    return useQuery({
-        queryKey: ['customers'],
-        queryFn: customerService.getAll,
-    })
-}
+const CUSTOMER_PAGE_SIZE = 20
 
-export function useCustomerSearch(query: string) {
-    return useQuery({
-        queryKey: ['customers', 'search', query],
-        queryFn: () => customerService.search(query),
-        enabled: query.length > 0,
+export function useCustomers(searchQuery: string = '') {
+    const trimmed = searchQuery.trim()
+
+    return useInfiniteQuery({
+        queryKey: ['customers', trimmed],
+        initialPageParam: 0,
+        queryFn: ({ pageParam = 0 }) =>
+            customerService.list({
+                limit: CUSTOMER_PAGE_SIZE,
+                offset: pageParam,
+                search: trimmed || undefined,
+            }),
+        getNextPageParam: (lastPage) =>
+            lastPage.has_more ? lastPage.next_offset ?? undefined : undefined,
     })
 }
 
@@ -22,6 +26,18 @@ export function useCreateCustomer() {
 
     return useMutation({
         mutationFn: (customer: Partial<Customer>) => customerService.create(customer),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['customers'] })
+        },
+    })
+}
+
+export function useUpdateCustomer() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: ({ id, data }: { id: number; data: Partial<Customer> }) =>
+            customerService.update(id, data),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['customers'] })
         },

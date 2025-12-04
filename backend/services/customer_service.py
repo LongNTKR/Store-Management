@@ -4,8 +4,11 @@ from typing import List, Optional
 from datetime import datetime
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
+from rapidfuzz import fuzz
 
 from database.models import Customer, Invoice
+from utils.text_utils import normalize_vietnamese, normalize_phone, normalize_email
+from config import Config
 
 
 class CustomerService:
@@ -19,6 +22,12 @@ class CustomerService:
             db_session: SQLAlchemy database session
         """
         self.db = db_session
+
+    def _normalize_page_params(self, limit: int, offset: int, max_limit: int = Config.MAX_PAGE_SIZE) -> tuple[int, int]:
+        """Clamp pagination inputs to safe values."""
+        safe_limit = max(1, min(limit or 0, max_limit))
+        safe_offset = max(0, offset or 0)
+        return safe_limit, safe_offset
 
     def create_customer(
         self,
@@ -43,8 +52,11 @@ class CustomerService:
         """
         customer = Customer(
             name=name,
+            normalized_name=normalize_vietnamese(name) if name else None,
             phone=phone,
+            normalized_phone=normalize_phone(phone) if phone else None,
             email=email,
+            normalized_email=normalize_email(email) if email else None,
             address=address,
             notes=notes
         )
@@ -81,23 +93,87 @@ class CustomerService:
 
     def search_customers(self, query: str, is_active: bool = True) -> List[Customer]:
         """
-        Search customers by name, phone, or email.
+        Search customers by name, phone, or email with Vietnamese normalization support.
+        
+        Multi-tier search strategy:
+        1. Search original fields (name, phone, email) with case-insensitive matching
+        2. Search normalized fields (normalized_name, normalized_phone, normalized_email)
+        3. Fuzzy matching on name/phone/email for typo tolerance
+        
+        This allows searching "nguyen" to find "Nguyễn Văn A",
+        or "0123" to find various phone formats like "(012) 345-6789".
 
         Args:
-            query: Search query
+            query: Search query (can be with or without Vietnamese diacritics)
             is_active: Filter by active status
 
         Returns:
-            List of matching customers
+            List of matching customers, ordered by name
         """
-        return self.db.query(Customer).filter(
+        if not query or not query.strip():
+            return []
+        
+        query = query.strip()
+        normalized_query = normalize_vietnamese(query)
+        normalized_phone_query = normalize_phone(query)
+        normalized_email_query = normalize_email(query)
+        
+        # Build search conditions with OR logic
+        search_conditions = [
+            # Original fields (case-insensitive)
+            Customer.name.ilike(f"%{query}%"),
+            Customer.phone.ilike(f"%{query}%"),
+            Customer.email.ilike(f"%{query}%"),
+            # Normalized fields
+            Customer.normalized_name.ilike(f"%{normalized_query}%"),
+        ]
+
+        # Only add normalized phone/email filters when they are non-empty to avoid matching everything
+        if normalized_phone_query:
+            search_conditions.append(Customer.normalized_phone.ilike(f"%{normalized_phone_query}%"))
+
+        if normalized_email_query:
+            search_conditions.append(Customer.normalized_email.ilike(f"%{normalized_email_query}%"))
+        
+        base_results = self.db.query(Customer).filter(
             Customer.is_active == is_active,
-            or_(
-                Customer.name.contains(query),
-                Customer.phone.contains(query),
-                Customer.email.contains(query)
-            )
-        ).all()
+            or_(*search_conditions)
+        ).order_by(Customer.name).all()
+
+        # Fuzzy matching for typo tolerance (additionally, without duplicating base results)
+        seen_ids = {c.id for c in base_results}
+        fuzzy_results: List[Customer] = []
+
+        # Limit candidate set for performance
+        candidates = self.db.query(Customer).filter(
+            Customer.is_active == is_active
+        ).limit(200).all()
+
+        for customer in candidates:
+            if customer.id in seen_ids:
+                continue
+
+            scores = []
+            if customer.name:
+                scores.append(fuzz.partial_ratio(query.lower(), customer.name.lower()))
+            if customer.normalized_name:
+                scores.append(fuzz.partial_ratio(normalized_query, customer.normalized_name))
+            if normalized_phone_query and customer.normalized_phone:
+                scores.append(fuzz.partial_ratio(normalized_phone_query, customer.normalized_phone))
+            if normalized_email_query and customer.normalized_email:
+                scores.append(fuzz.partial_ratio(normalized_email_query, customer.normalized_email))
+
+            best_score = max(scores) if scores else 0
+            if best_score >= 70:
+                fuzzy_results.append((customer, best_score))
+                seen_ids.add(customer.id)
+
+        # Sort fuzzy matches by score descending for more relevant ordering
+        fuzzy_results.sort(key=lambda item: item[1], reverse=True)
+        combined = base_results + [c for c, _ in fuzzy_results]
+
+        # Keep stable name ordering for base results; fuzzy already sorted
+        return combined
 
     def get_all_customers(self, is_active: bool = True) -> List[Customer]:
         """
@@ -112,6 +188,32 @@ class CustomerService:
         return self.db.query(Customer).filter(
             Customer.is_active == is_active
         ).order_by(Customer.name).all()
+
+    def get_customers_paginated(self, limit: int = 30, offset: int = 0, is_active: bool = True) -> tuple[List[Customer], int, bool, int | None]:
+        """
+        Get customers with pagination support.
+        """
+        safe_limit, safe_offset = self._normalize_page_params(limit, offset)
+        base_query = self.db.query(Customer).filter(Customer.is_active == is_active)
+        total = base_query.count()
+
+        customers = base_query.order_by(Customer.created_at.desc(), Customer.id.desc()).offset(safe_offset).limit(safe_limit + 1).all()
+        has_more = len(customers) > safe_limit
+        next_offset = safe_offset + safe_limit if has_more else None
+
+        return customers[:safe_limit], total, has_more, next_offset
+
+    def search_customers_paginated(self, query: str, limit: int = 30, offset: int = 0, is_active: bool = True) -> tuple[List[Customer], int, bool, int | None]:
+        """
+        Search customers with pagination using the advanced search logic.
+        """
+        safe_limit, safe_offset = self._normalize_page_params(limit, offset)
+        results = self.search_customers(query, is_active=is_active)
+        total = len(results)
+        sliced = results[safe_offset:safe_offset + safe_limit]
+        has_more = safe_offset + safe_limit < total
+        next_offset = safe_offset + safe_limit if has_more else None
+        return sliced, total, has_more, next_offset
 
     def update_customer(
         self,
@@ -142,12 +244,15 @@ class CustomerService:
 
         if name is not None:
             customer.name = name
+            customer.normalized_name = normalize_vietnamese(name)
 
         if phone is not None:
             customer.phone = phone
+            customer.normalized_phone = normalize_phone(phone)
 
         if email is not None:
             customer.email = email
+            customer.normalized_email = normalize_email(email)
 
         if address is not None:
             customer.address = address

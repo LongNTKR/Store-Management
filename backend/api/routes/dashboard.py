@@ -32,7 +32,7 @@ async def get_dashboard_data(db: Session = Depends(get_db)):
     # Fetch data in parallel (database level)
     products = product_service.get_all_products()
     customers = customer_service.get_all_customers()
-    invoices = invoice_service.search_invoices()
+    invoices, _, _, _ = invoice_service.search_invoices(limit=5, offset=0)
     invoice_stats = invoice_service.get_statistics()
 
     # Build stats

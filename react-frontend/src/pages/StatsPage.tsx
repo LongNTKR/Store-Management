@@ -6,9 +6,13 @@ import { formatCurrency } from '@/lib/utils'
 
 export function StatsPage() {
     const { data: stats } = useStatistics()
-    const { data: products } = useProducts()
-    const { data: customers } = useCustomers()
-    const { data: invoices } = useInvoices()
+    const { data: productPages } = useProducts()
+    const { data: customerPages } = useCustomers()
+    const { data: invoicePages } = useInvoices()
+
+    const totalProducts = productPages?.pages?.[0]?.total || 0
+    const totalCustomers = customerPages?.pages?.[0]?.total || 0
+    const totalInvoices = stats?.total_invoices || invoicePages?.pages?.[0]?.total || 0
 
     const paymentTotals = [
         { label: 'Đã thanh toán', value: stats?.paid_invoices || 0, color: 'bg-emerald-500' },
@@ -36,7 +40,7 @@ export function StatsPage() {
                         <CardTitle>📦 Sản phẩm</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <p className="text-3xl font-bold">{products?.length || 0}</p>
+                        <p className="text-3xl font-bold">{totalProducts}</p>
                     </CardContent>
                 </Card>
                 <Card>
@@ -44,7 +48,7 @@ export function StatsPage() {
                         <CardTitle>👥 Khách hàng</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <p className="text-3xl font-bold">{customers?.length || 0}</p>
+                        <p className="text-3xl font-bold">{totalCustomers}</p>
                     </CardContent>
                 </Card>
                 <Card>
@@ -52,7 +56,7 @@ export function StatsPage() {
                         <CardTitle>🧾 Hóa đơn</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <p className="text-3xl font-bold">{stats?.total_invoices || invoices?.length || 0}</p>
+                        <p className="text-3xl font-bold">{totalInvoices}</p>
                     </CardContent>
                 </Card>
                 <Card>

@@ -15,6 +15,13 @@ export interface Product {
     images?: string[]
 }
 
+export interface PaginatedResponse<T> {
+    items: T[]
+    total: number
+    has_more: boolean
+    next_offset?: number | null
+}
+
 export interface Customer {
     id: number
     name: string
@@ -43,6 +50,18 @@ export interface InvoiceCreate {
     payment_method?: string
     notes?: string
     status: 'pending' | 'paid' | 'cancelled'
+}
+
+export interface InvoiceUpdate {
+    items: InvoiceItemCreate[]
+    customer_id?: number
+    customer_name?: string
+    customer_phone?: string
+    customer_address?: string
+    discount: number
+    tax: number
+    payment_method?: string
+    notes?: string
 }
 
 export interface Invoice {

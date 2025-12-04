@@ -1,9 +1,38 @@
 import api from './api'
-import type { Product } from '../types'
+import type { PaginatedResponse, Product } from '../types'
+
+type PageParams = {
+    limit?: number
+    offset?: number
+    search?: string
+}
+
+const DEFAULT_LIMIT = 24
 
 export const productService = {
-    getAll: async (): Promise<Product[]> => {
-        const response = await api.get('/api/products')
+    list: async ({ limit = DEFAULT_LIMIT, offset = 0, search }: PageParams = {}): Promise<PaginatedResponse<Product>> => {
+        const hasSearch = Boolean(search && search.trim())
+        const endpoint = hasSearch ? '/api/products/search' : '/api/products'
+        const response = await api.get(endpoint, {
+            params: {
+                limit,
+                offset,
+                ...(hasSearch ? { q: search } : {}),
+            },
+        })
+        return response.data
+    },
+
+    listTrash: async ({ limit = DEFAULT_LIMIT, offset = 0, search }: PageParams = {}): Promise<PaginatedResponse<Product>> => {
+        const hasSearch = Boolean(search && search.trim())
+        const endpoint = hasSearch ? '/api/products/trash/search' : '/api/products/trash'
+        const response = await api.get(endpoint, {
+            params: {
+                limit,
+                offset,
+                ...(hasSearch ? { q: search } : {}),
+            },
+        })
         return response.data
     },
 
@@ -12,8 +41,13 @@ export const productService = {
         return response.data
     },
 
-    search: async (query: string): Promise<Product[]> => {
-        const response = await api.get(`/api/products/search`, {
+    search: async (query: string, limit = 12): Promise<Product[]> => {
+        const data = await productService.list({ search: query, limit, offset: 0 })
+        return data.items
+    },
+
+    autocomplete: async (query: string): Promise<Product[]> => {
+        const response = await api.get(`/api/products/autocomplete`, {
             params: { q: query }
         })
         return response.data

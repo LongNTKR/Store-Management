@@ -1,20 +1,27 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import api from '../services/api'
+import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import api from '@/services/api'
 import { productService } from '@/services/products'
 import type { Product } from '../types'
 
+const TRASH_PAGE_SIZE = 24
+
 /**
- * Hook to fetch deleted products (trash)
+ * Hook to fetch deleted products (trash) with infinite scroll support.
  */
-export function useTrashProducts() {
-    return useQuery<Product[]>({
-        queryKey: ['trash'],
-        queryFn: async () => {
-            const response = await api.get('/api/products/trash')
-            return response.data
-        },
-        staleTime: 1 * 60 * 1000, // 1 minute
-        gcTime: 5 * 60 * 1000, // 5 minutes (formerly cacheTime)
+export function useTrashProducts(searchQuery: string = '') {
+    const trimmed = searchQuery.trim()
+
+    return useInfiniteQuery({
+        queryKey: ['trash', trimmed],
+        initialPageParam: 0,
+        queryFn: ({ pageParam = 0 }) =>
+            productService.listTrash({
+                limit: TRASH_PAGE_SIZE,
+                offset: pageParam,
+                search: trimmed || undefined,
+            }),
+        getNextPageParam: (lastPage) =>
+            lastPage.has_more ? lastPage.next_offset ?? undefined : undefined,
     })
 }
 

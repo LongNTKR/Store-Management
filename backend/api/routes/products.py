@@ -10,6 +10,7 @@ from schemas.product import (
     ProductImageDeleteRequest,
     ProductBulkActionRequest,
 )
+from schemas.common import PaginatedResponse
 from services import ProductService
 from config import Config
 
@@ -21,27 +22,96 @@ def _get_product_service(db: Session) -> ProductService:
     return ProductService(db, Config.IMAGE_DIR, Config.MAX_PRODUCT_IMAGES)
 
 
-@router.get("/products", response_model=List[Product])
-async def get_products(db: Session = Depends(get_db)):
-    """Get all products"""
+@router.get("/products", response_model=PaginatedResponse[Product])
+async def get_products(
+    limit: int = 30,
+    offset: int = 0,
+    db: Session = Depends(get_db)
+):
+    """Get products with pagination (default 30 per page)."""
     product_service = _get_product_service(db)
-    products = product_service.get_all_products()
-    return products
+    items, total, has_more, next_offset = product_service.get_products_page(
+        limit=limit,
+        offset=offset,
+        is_active=True,
+    )
+    return {
+        "items": items,
+        "total": total,
+        "has_more": has_more,
+        "next_offset": next_offset,
+    }
 
 
-@router.get("/products/search", response_model=List[Product])
-async def search_products(q: str, db: Session = Depends(get_db)):
-    """Search products by query"""
+@router.get("/products/search", response_model=PaginatedResponse[Product])
+async def search_products(q: str, limit: int = 30, offset: int = 0, db: Session = Depends(get_db)):
+    """Search products by query with pagination."""
+    if not q or not q.strip():
+        return {"items": [], "total": 0, "has_more": False, "next_offset": None}
+
     product_service = _get_product_service(db)
+    items, total, has_more, next_offset = product_service.search_products_page(
+        query=q,
+        limit=limit,
+        offset=offset,
+        is_active=True,
+    )
+    return {
+        "items": items,
+        "total": total,
+        "has_more": has_more,
+        "next_offset": next_offset,
+    }
+
+
+@router.get("/products/autocomplete", response_model=List[Product])
+async def autocomplete_products(q: str, db: Session = Depends(get_db)):
+    """Get autocomplete suggestions for product search (fast, limited results)"""
+    if not q or len(q.strip()) < 1:
+        return []
+
+    product_service = _get_product_service(db)
+    # Search with limit for fast response
     products = product_service.search_products(query=q)
-    return products
+    # Return top 10 most relevant
+    return products[:10]
 
 
-@router.get("/products/trash", response_model=List[Product])
-async def get_trash(db: Session = Depends(get_db)):
-    """Get all deleted products (trash)"""
+@router.get("/products/trash", response_model=PaginatedResponse[Product])
+async def get_trash(limit: int = 30, offset: int = 0, db: Session = Depends(get_db)):
+    """Get deleted products (trash) with pagination."""
     product_service = _get_product_service(db)
-    return product_service.get_deleted_products()
+    items, total, has_more, next_offset = product_service.get_deleted_products_page(
+        limit=limit,
+        offset=offset,
+    )
+    return {
+        "items": items,
+        "total": total,
+        "has_more": has_more,
+        "next_offset": next_offset,
+    }
+
+
+@router.get("/products/trash/search", response_model=PaginatedResponse[Product])
+async def search_trash(q: str, limit: int = 30, offset: int = 0, db: Session = Depends(get_db)):
+    """Search deleted products (trash) with advanced multi-tier search and pagination."""
+    if not q or not q.strip():
+        return {"items": [], "total": 0, "has_more": False, "next_offset": None}
+
+    product_service = _get_product_service(db)
+    items, total, has_more, next_offset = product_service.search_products_page(
+        query=q,
+        limit=limit,
+        offset=offset,
+        is_active=False,
+    )
+    return {
+        "items": items,
+        "total": total,
+        "has_more": has_more,
+        "next_offset": next_offset,
+    }
 
 
 @router.get("/products/{product_id}", response_model=Product)

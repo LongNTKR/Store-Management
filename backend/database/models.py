@@ -27,6 +27,7 @@ class Product(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(255), nullable=False, index=True)
+    normalized_name = Column(String(255), nullable=True, index=True)  # Vietnamese unaccented name for search
     price = Column(Float, nullable=False)
     import_price = Column(Float, nullable=True)  # giá nhập (có thể không nhập)
     description = Column(Text, nullable=True)
@@ -85,8 +86,11 @@ class Customer(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(255), nullable=False, index=True)
+    normalized_name = Column(String(255), nullable=True, index=True)  # Vietnamese unaccented name for search
     phone = Column(String(20), nullable=True, index=True)
-    email = Column(String(255), nullable=True)
+    normalized_phone = Column(String(20), nullable=True, index=True)  # Digits-only phone for search
+    email = Column(String(255), nullable=True, index=True)  # Added index for email search
+    normalized_email = Column(String(255), nullable=True, index=True)  # Lowercase email for case-insensitive search
     address = Column(Text, nullable=True)
     notes = Column(Text, nullable=True)
 
@@ -112,8 +116,10 @@ class Invoice(Base):
 
     # Customer
     customer_id = Column(Integer, ForeignKey('customers.id'), nullable=True)
-    customer_name = Column(String(255), nullable=True)  # For one-time customers
-    customer_phone = Column(String(20), nullable=True)
+    customer_name = Column(String(255), nullable=True, index=True)  # For one-time customers
+    normalized_customer_name = Column(String(255), nullable=True, index=True)  # Vietnamese unaccented name for search
+    customer_phone = Column(String(20), nullable=True, index=True)
+    normalized_customer_phone = Column(String(20), nullable=True, index=True)  # Digits-only phone for search
     customer_address = Column(Text, nullable=True)
 
     # Financial

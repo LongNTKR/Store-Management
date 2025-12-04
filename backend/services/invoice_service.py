@@ -6,8 +6,11 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_
 import pytz
+from rapidfuzz import fuzz
 
 from database.models import Invoice, InvoiceItem, Product, Customer
+from utils.text_utils import normalize_vietnamese, normalize_phone
+from config import Config
 
 # UTC+7 timezone for Vietnam
 VN_TZ = pytz.timezone('Asia/Ho_Chi_Minh')
@@ -62,6 +65,12 @@ class InvoiceService:
         self.db = db_session
         self.output_dir = output_dir
         os.makedirs(output_dir, exist_ok=True)
+
+    def _normalize_page_params(self, limit: int, offset: int, max_limit: int = max(Config.MAX_PAGE_SIZE, 100)) -> tuple[int, int]:
+        """Clamp pagination inputs to safe bounds."""
+        safe_limit = max(1, min(limit or 0, max_limit))
+        safe_offset = max(0, offset or 0)
+        return safe_limit, safe_offset
 
     def generate_invoice_number(self) -> str:
         """
@@ -148,7 +157,9 @@ class InvoiceService:
             invoice_number=invoice_number,
             customer_id=customer_id,
             customer_name=customer_name,
+            normalized_customer_name=normalize_vietnamese(customer_name) if customer_name else None,
             customer_phone=customer_phone,
+            normalized_customer_phone=normalize_phone(customer_phone) if customer_phone else None,
             customer_address=customer_address,
             subtotal=subtotal,
             discount=discount,
@@ -176,6 +187,90 @@ class InvoiceService:
         """Get invoice by ID."""
         return self.db.query(Invoice).filter(Invoice.id == invoice_id).first()
 
+    def update_invoice(
+        self,
+        invoice_id: int,
+        items: List[Dict],
+        customer_id: Optional[int] = None,
+        customer_name: Optional[str] = None,
+        customer_phone: Optional[str] = None,
+        customer_address: Optional[str] = None,
+        discount: float = 0,
+        tax: float = 0,
+        payment_method: Optional[str] = None,
+        notes: Optional[str] = None
+    ) -> Optional[Invoice]:
+        """
+        Update an existing invoice. Only invoices in 'pending' status can be edited.
+
+        Args:
+            invoice_id: Invoice ID
+            items: List of dicts with 'product_id' and 'quantity'
+            customer_id: Customer ID (if registered customer)
+            customer_name: Customer name (for one-time customers)
+            customer_phone: Customer phone
+            customer_address: Customer address
+            discount: Discount amount
+            tax: Tax amount
+            payment_method: Payment method
+            notes: Additional notes
+
+        Returns:
+            Updated Invoice object or None if not found
+        """
+        invoice = self.get_invoice(invoice_id)
+        if not invoice:
+            return None
+
+        if invoice.status != 'pending':
+            raise ValueError("Chỉ có thể chỉnh sửa hóa đơn ở trạng thái chờ thanh toán.")
+
+        # Remove existing items and recalculate totals
+        self.db.query(InvoiceItem).filter(InvoiceItem.invoice_id == invoice_id).delete()
+        self.db.flush()
+
+        subtotal = 0
+        for item_data in items:
+            product = self.db.query(Product).filter(Product.id == item_data['product_id']).first()
+            if not product:
+                raise ValueError(f"Product {item_data['product_id']} not found")
+
+            quantity = item_data['quantity']
+            item_subtotal = product.price * quantity
+
+            invoice_item = InvoiceItem(
+                invoice_id=invoice_id,
+                product_id=product.id,
+                product_name=product.name,
+                product_price=product.price,
+                quantity=quantity,
+                unit=product.unit,
+                subtotal=item_subtotal
+            )
+            self.db.add(invoice_item)
+            subtotal += item_subtotal
+
+        total = subtotal - discount + tax
+
+        invoice.customer_id = customer_id
+        invoice.customer_name = customer_name
+        invoice.normalized_customer_name = normalize_vietnamese(customer_name) if customer_name else None
+        invoice.customer_phone = customer_phone
+        invoice.normalized_customer_phone = normalize_phone(customer_phone) if customer_phone else None
+        invoice.customer_address = customer_address
+        invoice.subtotal = subtotal
+        invoice.discount = discount
+        invoice.tax = tax
+        invoice.total = total
+        invoice.payment_method = payment_method
+        invoice.notes = notes
+        invoice.updated_at = get_vn_time()
+
+        self.db.commit()
+        self.db.refresh(invoice)
+
+        return invoice
+
     def get_invoice_by_number(self, invoice_number: str) -> Optional[Invoice]:
         """Get invoice by invoice number."""
         return self.db.query(Invoice).filter(
@@ -190,10 +285,20 @@ class InvoiceService:
         end_date: Optional[datetime] = None,
         invoice_number: Optional[str] = None,
         customer_name: Optional[str] = None,
-        customer_phone: Optional[str] = None
-    ) -> List[Invoice]:
+        customer_phone: Optional[str] = None,
+        limit: int = 50,
+        offset: int = 0
+    ) -> Tuple[List[Invoice], int, bool, Optional[int]]:
         """
-        Search invoices with filters. Uses joinedload to prevent N+1 queries.
+        Search invoices with filters and Vietnamese normalization support.
+        Uses joinedload to prevent N+1 queries.
+        
+        Multi-tier search strategy for text fields:
+        1. Search original fields (invoice_number, customer_name, customer_phone)
+        2. Search normalized fields (normalized_customer_name, normalized_customer_phone)
+        
+        This allows searching "nguyen" to find invoices with customer "Nguyễn Văn A",
+        or "0123" to find various phone formats like "(012) 345-6789".
         
         Args:
             customer_id: Filter by customer ID
@@ -201,35 +306,55 @@ class InvoiceService:
             start_date: Filter by start date
             end_date: Filter by end date
             invoice_number: Search by invoice number (partial match)
-            customer_name: Search by customer name (case-insensitive partial match)
-            customer_phone: Search by customer phone (partial match)
+            customer_name: Search by customer name (with Vietnamese normalization)
+            customer_phone: Search by customer phone (with format normalization)
+            limit: Page size
+            offset: Offset for pagination
         """
         from sqlalchemy.orm import joinedload
 
+        safe_limit, safe_offset = self._normalize_page_params(limit, offset)
         filters = []
+        base_filters = []  # filters without search OR for fuzzy fallback
 
         if customer_id:
             filters.append(Invoice.customer_id == customer_id)
+            base_filters.append(Invoice.customer_id == customer_id)
 
         if status:
             filters.append(Invoice.status == status)
+            base_filters.append(Invoice.status == status)
 
         if start_date:
             filters.append(Invoice.created_at >= start_date)
+            base_filters.append(Invoice.created_at >= start_date)
 
         if end_date:
             filters.append(Invoice.created_at <= end_date)
+            base_filters.append(Invoice.created_at <= end_date)
 
         # Search filters - use OR logic for search fields
         search_filters = []
+        
         if invoice_number:
-            search_filters.append(Invoice.invoice_number.like(f"%{invoice_number}%"))
+            # Invoice number search (original field only)
+            search_filters.append(Invoice.invoice_number.ilike(f"%{invoice_number}%"))
 
         if customer_name:
-            search_filters.append(Invoice.customer_name.ilike(f"%{customer_name}%"))
+            # Customer name search with Vietnamese normalization
+            normalized_name = normalize_vietnamese(customer_name)
+            search_filters.extend([
+                Invoice.customer_name.ilike(f"%{customer_name}%"),
+                Invoice.normalized_customer_name.ilike(f"%{normalized_name}%")
+            ])
 
         if customer_phone:
-            search_filters.append(Invoice.customer_phone.like(f"%{customer_phone}%"))
+            # Customer phone search with format normalization
+            normalized_phone_query = normalize_phone(customer_phone)
+            search_filters.append(Invoice.customer_phone.ilike(f"%{customer_phone}%"))
+            # Avoid adding a wildcard '%%' when query has no digits
+            if normalized_phone_query:
+                search_filters.append(Invoice.normalized_customer_phone.ilike(f"%{normalized_phone_query}%"))
 
         # Add OR search filters if any
         if search_filters:
@@ -240,10 +365,65 @@ class InvoiceService:
         # Eagerly load invoice items to prevent N+1 queries
         query = query.options(joinedload(Invoice.items))
 
+        strict_query = query
         if filters:
-            query = query.filter(and_(*filters))
+            strict_query = strict_query.filter(and_(*filters))
 
-        return query.order_by(Invoice.created_at.desc()).all()
+        total = strict_query.count()
+        strict_results = strict_query.order_by(Invoice.created_at.desc(), Invoice.id.desc()).offset(safe_offset).limit(safe_limit + 1).all()
+        has_more = len(strict_results) > safe_limit
+        items = strict_results[:safe_limit]
+
+        # Fuzzy matching for typo tolerance if a search term is present and we still have room
+        search_term_present = any([invoice_number, customer_name, customer_phone])
+        normalized_name = normalize_vietnamese(customer_name) if customer_name else ""
+        normalized_phone_query = normalize_phone(customer_phone) if customer_phone else ""
+        search_term_lower = (invoice_number or customer_name or customer_phone or "").lower()
+
+        seen_ids = {inv.id for inv in items}
+        fuzzy_total = 0
+
+        if search_term_present and len(items) < safe_limit:
+            base_query = self.db.query(Invoice).options(joinedload(Invoice.items))
+            if base_filters:
+                base_query = base_query.filter(and_(*base_filters))
+
+            candidates = base_query.order_by(Invoice.created_at.desc(), Invoice.id.desc()).limit(300).all()
+            fuzzy_results: List[Tuple[Invoice, int]] = []
+
+            for inv in candidates:
+                if inv.id in seen_ids:
+                    continue
+
+                scores = []
+                if invoice_number:
+                    scores.append(fuzz.partial_ratio(invoice_number.lower(), inv.invoice_number.lower()))
+                if customer_name and inv.customer_name:
+                    scores.append(fuzz.partial_ratio(search_term_lower, inv.customer_name.lower()))
+                if normalized_name and inv.normalized_customer_name:
+                    scores.append(fuzz.partial_ratio(normalized_name, inv.normalized_customer_name))
+                if normalized_phone_query and inv.normalized_customer_phone:
+                    scores.append(fuzz.partial_ratio(normalized_phone_query, inv.normalized_customer_phone))
+
+                best_score = max(scores) if scores else 0
+                if best_score >= 70:
+                    fuzzy_results.append((inv, best_score))
+                    seen_ids.add(inv.id)
+
+            fuzzy_results.sort(key=lambda item: item[1], reverse=True)
+            fuzzy_matches = [inv for inv, _ in fuzzy_results]
+            fuzzy_total = len(fuzzy_matches)
+
+            remaining_slots = safe_limit - len(items)
+            if remaining_slots > 0:
+                items.extend(fuzzy_matches[:remaining_slots])
+
+            if not has_more:
+                has_more = fuzzy_total > remaining_slots
+
+        total += fuzzy_total
+        next_offset = safe_offset + safe_limit if has_more else None
+        return items, total, has_more, next_offset
 
     def update_invoice_status(self, invoice_id: int, status: str) -> Optional[Invoice]:
         """

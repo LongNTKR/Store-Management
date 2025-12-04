@@ -34,6 +34,7 @@ class Config:
     INVOICE_DIR = os.getenv("INVOICE_DIR", str(APP_DATA_DIR / "invoices"))
     TEMP_DIR = os.getenv("TEMP_DIR", str(APP_DATA_DIR / "temp"))
     MAX_PRODUCT_IMAGES = int(os.getenv("MAX_PRODUCT_IMAGES", "5"))
+    MAX_PAGE_SIZE = int(os.getenv("MAX_PAGE_SIZE", "50"))
 
     # UI Theme
     UI_THEME = os.getenv("UI_THEME", "blue")  # blue, green, dark-blue

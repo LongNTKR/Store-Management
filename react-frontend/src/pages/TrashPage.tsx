@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
     useTrashProducts,
     useRestoreProduct,
@@ -6,10 +6,13 @@ import {
     useBulkPermanentlyDeleteProducts,
     useBulkRestoreProducts,
 } from '@/hooks/useTrash'
+import { useDebounce } from '@/hooks/useDebounce'
+import { useInfiniteScroll } from '@/hooks/useInfiniteScroll'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn, formatCurrency } from '@/lib/utils'
+import { SearchHighlight } from '@/components/shared/SearchHighlight'
 import { Trash2, RotateCcw, Search, AlertCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -22,21 +25,37 @@ import {
 } from '@/components/ui/dialog'
 
 export function TrashPage() {
-    const { data: trashedProducts = [], isLoading } = useTrashProducts()
-    const restoreMutation = useRestoreProduct()
-    const permanentDeleteMutation = usePermanentlyDeleteProduct()
-    const bulkPermanentDeleteMutation = useBulkPermanentlyDeleteProducts()
-    const bulkRestoreMutation = useBulkRestoreProducts()
     const [searchQuery, setSearchQuery] = useState('')
     const [deleteTarget, setDeleteTarget] = useState<{ id: number, name: string } | null>(null)
     const [selectedIds, setSelectedIds] = useState<number[]>([])
     const [isBulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false)
 
-    // Filter by search query
-    const filteredProducts = trashedProducts.filter(p =>
-        p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.category?.toLowerCase().includes(searchQuery.toLowerCase())
+    const debouncedSearch = useDebounce(searchQuery.trim(), 300)
+
+    const {
+        data: trashPages,
+        isLoading,
+        fetchNextPage,
+        hasNextPage,
+        isFetchingNextPage,
+    } = useTrashProducts(debouncedSearch)
+
+    const restoreMutation = useRestoreProduct()
+    const permanentDeleteMutation = usePermanentlyDeleteProduct()
+    const bulkPermanentDeleteMutation = useBulkPermanentlyDeleteProducts()
+    const bulkRestoreMutation = useBulkRestoreProducts()
+
+    const filteredProducts = useMemo(
+        () => trashPages?.pages.flatMap((page) => page.items) ?? [],
+        [trashPages]
     )
+    const totalTrashed = trashPages?.pages?.[0]?.total ?? 0
+    const isEmpty = !isLoading && filteredProducts.length === 0
+    const loadMoreRef = useInfiniteScroll({
+        hasMore: Boolean(hasNextPage),
+        isLoading: isFetchingNextPage,
+        onLoadMore: () => fetchNextPage(),
+    })
     const selectedCount = selectedIds.length
     const isSelectionMode = selectedCount > 0
 
@@ -160,7 +179,7 @@ export function TrashPage() {
                 <div className="relative flex-1">
                     <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input
-                        placeholder="Tìm kiếm trong thùng rác..."
+                        placeholder="🔍 Tìm kiếm trong thùng rác (hỗ trợ tìm kiếm không dấu)"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         className="pl-10"
@@ -180,6 +199,10 @@ export function TrashPage() {
                         </span>
                     )}
                     <div className="ml-auto flex flex-wrap items-center gap-2">
+                        <span className="text-xs text-muted-foreground">
+                            Hiển thị {filteredProducts.length}
+                            {totalTrashed ? `/${totalTrashed}` : ''} sản phẩm
+                        </span>
                         <Button
                             type="button"
                             variant="outline"
@@ -222,7 +245,7 @@ export function TrashPage() {
             )}
 
             {/* Empty State */}
-            {!isLoading && filteredProducts.length === 0 && (
+            {!isLoading && isEmpty && (
                 <Card>
                     <CardContent className="pt-12 pb-12 text-center">
                         <div className="text-4xl mb-3">📭</div>
@@ -269,9 +292,25 @@ export function TrashPage() {
                                         />
                                     </div>
                                     <div className="flex-1 min-w-0">
-                                        <p className="font-semibold truncate">{product.name}</p>
+                                        <p className="font-semibold truncate">
+                                            {searchQuery.trim() ? (
+                                                <SearchHighlight text={product.name} query={searchQuery} />
+                                            ) : (
+                                                product.name
+                                            )}
+                                        </p>
                                         <p className="text-sm text-muted-foreground">
-                                            {product.category && `📦 ${product.category} • `}
+                                            {product.category && (
+                                                <>
+                                                    📦{' '}
+                                                    {searchQuery.trim() ? (
+                                                        <SearchHighlight text={product.category} query={searchQuery} />
+                                                    ) : (
+                                                        product.category
+                                                    )}
+                                                    {' • '}
+                                                </>
+                                            )}
                                             Giá: {formatCurrency(product.price)}
                                         </p>
                                         <p className="text-xs text-muted-foreground mt-1">
@@ -327,10 +366,19 @@ export function TrashPage() {
             )}
 
             {/* Loading State */}
-            {isLoading && (
+            {isLoading && filteredProducts.length === 0 && (
                 <div className="text-center py-12">
                     <div className="animate-spin text-2xl mb-3">⏳</div>
                     <p className="text-muted-foreground">Đang tải...</p>
+                </div>
+            )}
+
+            {(hasNextPage || isFetchingNextPage) && (
+                <div
+                    ref={loadMoreRef}
+                    className="py-6 text-center text-sm text-muted-foreground"
+                >
+                    {isFetchingNextPage ? 'Đang tải thêm...' : 'Kéo xuống để xem thêm sản phẩm đã xóa'}
                 </div>
             )}
 

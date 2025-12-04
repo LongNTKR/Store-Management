@@ -1,0 +1,138 @@
+import { useEffect } from 'react'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import * as z from 'zod'
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogFooter,
+} from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { useUpdateCustomer } from '@/hooks/useCustomers'
+import type { Customer } from '@/types'
+
+const customerSchema = z.object({
+    name: z.string().min(1, 'Vui lòng nhập tên khách hàng'),
+    phone: z.string().optional(),
+    email: z.string().email('Email không hợp lệ').optional().or(z.literal('')),
+    address: z.string().optional(),
+    notes: z.string().optional(),
+})
+
+type CustomerFormData = z.infer<typeof customerSchema>
+
+interface EditCustomerDialogProps {
+    open: boolean
+    onOpenChange: (open: boolean) => void
+    customer: Customer | null
+}
+
+export function EditCustomerDialog({ open, onOpenChange, customer }: EditCustomerDialogProps) {
+    const updateCustomer = useUpdateCustomer()
+
+    const {
+        register,
+        handleSubmit,
+        reset,
+        formState: { errors },
+    } = useForm<CustomerFormData>({
+        resolver: zodResolver(customerSchema),
+    })
+
+    // Reset form with customer data when dialog opens
+    useEffect(() => {
+        if (customer && open) {
+            reset({
+                name: customer.name,
+                phone: customer.phone || '',
+                email: customer.email || '',
+                address: customer.address || '',
+                notes: customer.notes || '',
+            })
+        }
+    }, [customer, open, reset])
+
+    const onSubmit = async (data: CustomerFormData) => {
+        if (!customer) return
+
+        try {
+            await updateCustomer.mutateAsync({
+                id: customer.id,
+                data: {
+                    name: data.name,
+                    phone: data.phone || undefined,
+                    email: data.email || undefined,
+                    address: data.address || undefined,
+                    notes: data.notes || undefined,
+                },
+            })
+            onOpenChange(false)
+        } catch (error) {
+            console.error('Failed to update customer:', error)
+        }
+    }
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="sm:max-w-[600px]">
+                <DialogHeader>
+                    <DialogTitle>✏️ Chỉnh Sửa Khách Hàng</DialogTitle>
+                </DialogHeader>
+
+                <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="name">Tên khách hàng *</Label>
+                            <Input id="name" placeholder="Ví dụ: Nguyễn Văn A" {...register('name')} />
+                            {errors.name && (
+                                <p className="text-sm text-destructive">{errors.name.message}</p>
+                            )}
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label htmlFor="phone">Số điện thoại</Label>
+                            <Input id="phone" placeholder="0912..." {...register('phone')} />
+                            {errors.phone && (
+                                <p className="text-sm text-destructive">{errors.phone.message}</p>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="email">Email</Label>
+                            <Input id="email" type="email" placeholder="example@gmail.com" {...register('email')} />
+                            {errors.email && (
+                                <p className="text-sm text-destructive">{errors.email.message}</p>
+                            )}
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label htmlFor="address">Địa chỉ</Label>
+                            <Input id="address" placeholder="Địa chỉ khách hàng" {...register('address')} />
+                        </div>
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label htmlFor="notes">Ghi chú</Label>
+                        <Textarea id="notes" placeholder="Thông tin thêm..." {...register('notes')} />
+                    </div>
+
+                    <DialogFooter className="gap-2">
+                        <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                            ❌ Hủy
+                        </Button>
+                        <Button type="submit" disabled={updateCustomer.isPending}>
+                            💾 Cập nhật
+                        </Button>
+                    </DialogFooter>
+                </form>
+            </DialogContent>
+        </Dialog>
+    )
+}

@@ -6,13 +6,34 @@ import uuid
 from typing import List, Optional, Dict, Tuple
 from datetime import datetime
 from sqlalchemy.orm import Session
-from sqlalchemy import or_, and_
+from sqlalchemy import or_, and_, text
+from unidecode import unidecode
+from rapidfuzz import fuzz, process
 
 from database.models import Product, PriceHistory
 from services.ocr_service import OCRService
+from config import Config
 
 
 logger = logging.getLogger(__name__)
+
+
+def normalize_vietnamese(text: str) -> str:
+    """
+    Normalize Vietnamese text by removing diacritics.
+
+    Args:
+        text: Vietnamese text with diacritics
+
+    Returns:
+        Normalized text without diacritics in lowercase
+
+    Example:
+        normalize_vietnamese("Bút bi đỏ") -> "but bi do"
+    """
+    if not text:
+        return ""
+    return unidecode(text).lower().strip()
 
 
 class ProductService:
@@ -31,6 +52,83 @@ class ProductService:
         self.max_images = max_images
         self.allowed_extensions = {'.jpg', '.jpeg', '.png', '.gif', '.webp'}
         os.makedirs(self.image_dir, exist_ok=True)
+        self._setup_fts5_if_needed()
+
+    def _normalize_page_params(self, limit: int, offset: int, max_limit: int = Config.MAX_PAGE_SIZE) -> Tuple[int, int]:
+        """Clamp pagination params to avoid heavy queries."""
+        safe_limit = max(1, min(limit or 0, max_limit))
+        safe_offset = max(0, offset or 0)
+        return safe_limit, safe_offset
+
+    def _fetch_with_pagination(self, query, limit: int, offset: int, order_recent: bool = True) -> Tuple[List[Product], bool]:
+        """Apply pagination to a SQLAlchemy query and detect if more results exist."""
+        working_query = query
+        if order_recent:
+            working_query = working_query.order_by(Product.updated_at.desc(), Product.id.desc())
+
+        results = working_query.offset(offset).limit(limit + 1).all()
+        has_more = len(results) > limit
+        return results[:limit], has_more
+
+    def _setup_fts5_if_needed(self):
+        """Setup SQLite FTS5 virtual table and triggers for full-text search."""
+        try:
+            # Check if FTS5 table exists
+            result = self.db.execute(text(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='products_fts'"
+            )).fetchone()
+
+            if result is None:
+                logger.info("Creating FTS5 virtual table for products...")
+
+                # Create FTS5 virtual table
+                self.db.execute(text("""
+                    CREATE VIRTUAL TABLE IF NOT EXISTS products_fts USING fts5(
+                        product_id UNINDEXED,
+                        name,
+                        normalized_name,
+                        description,
+                        category,
+                        content='products',
+                        content_rowid='id'
+                    )
+                """))
+
+                # Populate FTS5 table with existing data
+                self.db.execute(text("""
+                    INSERT INTO products_fts(product_id, name, normalized_name, description, category)
+                    SELECT id, name, normalized_name, description, category FROM products WHERE is_active = 1
+                """))
+
+                # Create trigger for INSERT
+                self.db.execute(text("""
+                    CREATE TRIGGER IF NOT EXISTS products_fts_insert AFTER INSERT ON products BEGIN
+                        INSERT INTO products_fts(product_id, name, normalized_name, description, category)
+                        VALUES (new.id, new.name, new.normalized_name, new.description, new.category);
+                    END
+                """))
+
+                # Create trigger for UPDATE
+                self.db.execute(text("""
+                    CREATE TRIGGER IF NOT EXISTS products_fts_update AFTER UPDATE ON products BEGIN
+                        DELETE FROM products_fts WHERE product_id = old.id;
+                        INSERT INTO products_fts(product_id, name, normalized_name, description, category)
+                        VALUES (new.id, new.name, new.normalized_name, new.description, new.category);
+                    END
+                """))
+
+                # Create trigger for DELETE
+                self.db.execute(text("""
+                    CREATE TRIGGER IF NOT EXISTS products_fts_delete AFTER DELETE ON products BEGIN
+                        DELETE FROM products_fts WHERE product_id = old.id;
+                    END
+                """))
+
+                self.db.commit()
+                logger.info("FTS5 table and triggers created successfully")
+        except Exception as e:
+            logger.warning(f"FTS5 setup failed (may not be critical): {e}")
+            self.db.rollback()
 
     def create_product(
         self,
@@ -61,6 +159,7 @@ class ProductService:
         """
         product = Product(
             name=name,
+            normalized_name=normalize_vietnamese(name),
             price=price,
             import_price=import_price,
             description=description,
@@ -112,39 +211,226 @@ class ProductService:
         is_active: bool = True
     ) -> List[Product]:
         """
-        Search products with filters.
+        Advanced multi-tier search for products.
+
+        Search Strategy (in order of priority):
+        1. FTS5 full-text search (best for multi-word queries)
+        2. Normalized name matching (Vietnamese without diacritics)
+        3. Fuzzy matching (typo tolerance)
+        4. Multi-keyword search (OR logic for each word)
 
         Args:
-            query: Search query (name or description)
+            query: Search query (supports Vietnamese with/without diacritics)
             category: Filter by category
             min_price: Minimum price
             max_price: Maximum price
             is_active: Filter by active status
 
         Returns:
-            List of matching products
+            List of matching products, ranked by relevance
         """
-        query = query.strip() if query else query  # normalize whitespace to improve matching
-        filters = [Product.is_active == is_active]
+        if not query or not query.strip():
+            # Search endpoints should only return matches; empty query yields empty set
+            return []
 
-        if query:
-            filters.append(
-                or_(
-                    Product.name.ilike(f"%{query}%"),
-                    Product.description.ilike(f"%{query}%")
-                )
+        # Normalize query for better matching
+        query = query.strip()
+        normalized_query = normalize_vietnamese(query)
+
+        # Split into keywords for multi-keyword search
+        keywords = [kw for kw in normalized_query.split() if len(kw) > 1]
+
+        # Track found product IDs to avoid duplicates
+        seen_ids = set()
+        results = []
+
+        # TIER 1: FTS5 Full-Text Search (highest priority)
+        try:
+            fts_products = self._search_with_fts5(normalized_query, is_active, category, min_price, max_price)
+            for product in fts_products:
+                if product.id not in seen_ids:
+                    seen_ids.add(product.id)
+                    results.append(product)
+        except Exception as e:
+            logger.warning(f"FTS5 search failed: {e}")
+
+        # TIER 2: Normalized Name Exact/Prefix Match
+        normalized_products = self._search_normalized(
+            normalized_query, is_active, category, min_price, max_price
+        )
+        for product in normalized_products:
+            if product.id not in seen_ids:
+                seen_ids.add(product.id)
+                results.append(product)
+
+        # TIER 3: Fuzzy Matching (typo tolerance)
+        fuzzy_products = self._search_fuzzy(
+            query, normalized_query, is_active, category, min_price, max_price, exclude_ids=seen_ids
+        )
+        for product in fuzzy_products:
+            if product.id not in seen_ids:
+                seen_ids.add(product.id)
+                results.append(product)
+
+        # TIER 4: Multi-keyword Search (OR logic)
+        if len(keywords) > 1:
+            keyword_products = self._search_multi_keyword(
+                keywords, is_active, category, min_price, max_price, exclude_ids=seen_ids
             )
+            for product in keyword_products:
+                if product.id not in seen_ids:
+                    seen_ids.add(product.id)
+                    results.append(product)
+
+        return results
+
+    def _search_with_fts5(
+        self,
+        normalized_query: str,
+        is_active: bool,
+        category: Optional[str],
+        min_price: Optional[float],
+        max_price: Optional[float]
+    ) -> List[Product]:
+        """Search using SQLite FTS5 for fast full-text search."""
+        # FTS5 query syntax (match across indexed columns: name, normalized_name, description, category)
+        fts_query = ' OR '.join([f'"{word}"*' for word in normalized_query.split() if len(word) > 1])
+        if not fts_query:
+            return []
+
+        # Query FTS5 table
+        sql = text("""
+            SELECT DISTINCT p.*
+            FROM products p
+            INNER JOIN products_fts fts ON p.id = fts.product_id
+            WHERE products_fts MATCH :query
+              AND p.is_active = :is_active
+              AND (:category IS NULL OR p.category = :category)
+              AND (:min_price IS NULL OR p.price >= :min_price)
+              AND (:max_price IS NULL OR p.price <= :max_price)
+            ORDER BY fts.rank
+            LIMIT 50
+        """)
+
+        result = self.db.execute(sql, {
+            'query': fts_query,
+            'is_active': is_active,
+            'category': category,
+            'min_price': min_price,
+            'max_price': max_price
+        })
+
+        # Map to Product objects
+        product_ids = [row[0] for row in result]
+        if not product_ids:
+            return []
+
+        return self.db.query(Product).filter(Product.id.in_(product_ids)).all()
+
+    def _search_normalized(
+        self,
+        normalized_query: str,
+        is_active: bool,
+        category: Optional[str],
+        min_price: Optional[float],
+        max_price: Optional[float]
+    ) -> List[Product]:
+        """Search using normalized (unaccented) name matching."""
+        filters = [
+            Product.is_active == is_active,
+            or_(
+                Product.normalized_name.ilike(f"%{normalized_query}%"),
+                Product.name.ilike(f"%{normalized_query}%")
+            )
+        ]
 
         if category:
             filters.append(Product.category == category)
-
         if min_price is not None:
             filters.append(Product.price >= min_price)
-
         if max_price is not None:
             filters.append(Product.price <= max_price)
 
-        return self.db.query(Product).filter(and_(*filters)).all()
+        return self.db.query(Product).filter(and_(*filters)).limit(50).all()
+
+    def _search_fuzzy(
+        self,
+        query: str,
+        normalized_query: str,
+        is_active: bool,
+        category: Optional[str],
+        min_price: Optional[float],
+        max_price: Optional[float],
+        exclude_ids: set,
+        threshold: int = 70
+    ) -> List[Product]:
+        """Search using fuzzy matching for typo tolerance."""
+        # Get candidate products
+        filters = [Product.is_active == is_active]
+        if category:
+            filters.append(Product.category == category)
+        if min_price is not None:
+            filters.append(Product.price >= min_price)
+        if max_price is not None:
+            filters.append(Product.price <= max_price)
+        if exclude_ids:
+            filters.append(Product.id.notin_(exclude_ids))
+
+        candidates = self.db.query(Product).filter(and_(*filters)).limit(200).all()
+
+        # Fuzzy match against names
+        fuzzy_results = []
+        for product in candidates:
+            # Try fuzzy matching on both original and normalized names
+            score_original = fuzz.partial_ratio(query.lower(), product.name.lower())
+            score_normalized = fuzz.partial_ratio(
+                normalized_query, product.normalized_name or ""
+            )
+            best_score = max(score_original, score_normalized)
+
+            if best_score >= threshold:
+                fuzzy_results.append((product, best_score))
+
+        # Sort by score descending
+        fuzzy_results.sort(key=lambda x: x[1], reverse=True)
+
+        return [product for product, score in fuzzy_results[:20]]
+
+    def _search_multi_keyword(
+        self,
+        keywords: List[str],
+        is_active: bool,
+        category: Optional[str],
+        min_price: Optional[float],
+        max_price: Optional[float],
+        exclude_ids: set
+    ) -> List[Product]:
+        """Search using OR logic across multiple keywords."""
+        if not keywords:
+            return []
+
+        # Build OR conditions for each keyword
+        keyword_conditions = []
+        for keyword in keywords:
+            keyword_conditions.append(Product.normalized_name.ilike(f"%{keyword}%"))
+            keyword_conditions.append(Product.name.ilike(f"%{keyword}%"))
+            keyword_conditions.append(Product.description.ilike(f"%{keyword}%"))
+
+        filters = [
+            Product.is_active == is_active,
+            or_(*keyword_conditions)
+        ]
+
+        if category:
+            filters.append(Product.category == category)
+        if min_price is not None:
+            filters.append(Product.price >= min_price)
+        if max_price is not None:
+            filters.append(Product.price <= max_price)
+        if exclude_ids:
+            filters.append(Product.id.notin_(exclude_ids))
+
+        return self.db.query(Product).filter(and_(*filters)).limit(30).all()
 
     def get_all_products(self, is_active: bool = True) -> List[Product]:
         """
@@ -157,6 +443,85 @@ class ProductService:
             List of all products
         """
         return self.db.query(Product).filter(Product.is_active == is_active).all()
+
+    def get_products_page(self, limit: int = 30, offset: int = 0, is_active: bool = True) -> Tuple[List[Product], int, bool, Optional[int]]:
+        """
+        Get a paginated list of products with total count and has_more flag.
+        """
+        safe_limit, safe_offset = self._normalize_page_params(limit, offset)
+        base_query = self.db.query(Product).filter(Product.is_active == is_active)
+
+        total = base_query.count()
+        items, has_more = self._fetch_with_pagination(
+            base_query, limit=safe_limit, offset=safe_offset, order_recent=True
+        )
+        next_offset = safe_offset + safe_limit if has_more else None
+        return items, total, has_more, next_offset
+
+    def get_deleted_products_page(self, limit: int = 30, offset: int = 0) -> Tuple[List[Product], int, bool, Optional[int]]:
+        """
+        Get paginated soft-deleted products ordered by deletion date.
+        """
+        safe_limit, safe_offset = self._normalize_page_params(limit, offset)
+        base_query = self.db.query(Product).filter(
+            Product.is_active == False,
+            Product.deleted_at.isnot(None)
+        ).order_by(Product.deleted_at.desc(), Product.id.desc())
+
+        total = base_query.count()
+        results = base_query.offset(safe_offset).limit(safe_limit + 1).all()
+        has_more = len(results) > safe_limit
+        next_offset = safe_offset + safe_limit if has_more else None
+        return results[:safe_limit], total, has_more, next_offset
+
+    def search_products_page(
+        self,
+        query: Optional[str],
+        limit: int = 30,
+        offset: int = 0,
+        is_active: bool = True
+    ) -> Tuple[List[Product], int, bool, Optional[int]]:
+        """
+        Paginated search over products (active or deleted).
+        """
+        safe_limit, safe_offset = self._normalize_page_params(limit, offset)
+        results = self.search_products(query=query, is_active=is_active)
+        total = len(results)
+        sliced = results[safe_offset:safe_offset + safe_limit]
+        has_more = safe_offset + safe_limit < total
+        next_offset = safe_offset + safe_limit if has_more else None
+        return sliced, total, has_more, next_offset
+
+    def search_deleted_products(
+        self,
+        query: Optional[str] = None,
+        category: Optional[str] = None,
+        min_price: Optional[float] = None,
+        max_price: Optional[float] = None
+    ) -> List[Product]:
+        """
+        Search deleted products (in trash) with advanced multi-tier search.
+
+        This is a convenience wrapper around search_products() with is_active=False.
+        Uses the same powerful search features: FTS5, fuzzy matching, Vietnamese
+        diacritic normalization, and multi-keyword support.
+
+        Args:
+            query: Search query (supports Vietnamese with/without diacritics)
+            category: Filter by category
+            min_price: Minimum price
+            max_price: Maximum price
+
+        Returns:
+            List of matching deleted products, ranked by relevance
+        """
+        return self.search_products(
+            query=query,
+            category=category,
+            min_price=min_price,
+            max_price=max_price,
+            is_active=False  # Only search deleted products
+        )
 
     def update_product(
         self,
@@ -200,6 +565,7 @@ class ProductService:
 
         if name is not None:
             product.name = name
+            product.normalized_name = normalize_vietnamese(name)
 
         if import_price is not None:
             product.import_price = import_price

@@ -1,6 +1,7 @@
-import { useEffect, useState, useRef } from 'react'
-import { useProducts, useProductSearch, useDeleteProduct, useBulkDeleteProducts, useAutocomplete } from '../hooks/useProducts'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useProducts, useDeleteProduct, useBulkDeleteProducts, useAutocomplete } from '../hooks/useProducts'
 import { useDebounce } from '../hooks/useDebounce'
+import { useInfiniteScroll } from '@/hooks/useInfiniteScroll'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
@@ -28,26 +29,35 @@ export function ProductsPage() {
     const debouncedSearch = useDebounce(searchQuery.trim(), 100)
     const debouncedAutocomplete = useDebounce(searchQuery.trim(), 300)
 
-    const { data: allProducts, isLoading: isLoadingAll } = useProducts()
     const {
-        data: searchResults,
-        isLoading: isSearchLoading,
-    } = useProductSearch(debouncedSearch)
+        data: productPages,
+        isLoading,
+        fetchNextPage,
+        hasNextPage,
+        isFetchingNextPage,
+    } = useProducts(debouncedSearch)
     const { data: autocompleteResults } = useAutocomplete(debouncedAutocomplete)
     const deleteProduct = useDeleteProduct()
     const bulkDeleteProducts = useBulkDeleteProducts()
 
-    const products = debouncedSearch ? searchResults : allProducts
-    const isLoading = debouncedSearch ? (isSearchLoading && !searchResults) : isLoadingAll
+    const products = useMemo(
+        () => productPages?.pages.flatMap((page) => page.items) ?? [],
+        [productPages]
+    )
+    const totalProducts = productPages?.pages?.[0]?.total ?? 0
     const selectedCount = selectedProductIds.length
     const isSelectionMode = selectedCount > 0
+    const isInitialLoading = isLoading && products.length === 0
+    const isEmpty = !isLoading && products.length === 0
+    const loadMoreRef = useInfiniteScroll({
+        hasMore: Boolean(hasNextPage),
+        isLoading: isFetchingNextPage,
+        onLoadMore: () => fetchNextPage(),
+    })
 
     useEffect(() => {
-        if (!products) {
-            setSelectedProductIds((prev) => (prev.length > 0 ? [] : prev))
-            return
-        }
         setSelectedProductIds((prev) => {
+            if (prev.length === 0) return prev
             const visibleIds = new Set(products.map((p) => p.id))
             const next = prev.filter((id) => visibleIds.has(id))
             return next.length === prev.length ? prev : next
@@ -239,7 +249,7 @@ export function ProductsPage() {
                 </Button>
             </div>
 
-            {products && products.length > 0 && (
+            {products.length > 0 && (
                 <div className="mb-4 flex flex-wrap items-center gap-3 rounded-md border bg-muted/30 px-4 py-3 text-sm">
                     {isSelectionMode ? (
                         <span className="font-medium text-foreground">
@@ -250,7 +260,11 @@ export function ProductsPage() {
                             Bật các ô chọn để xóa nhiều sản phẩm cùng lúc
                         </span>
                     )}
-                    <div className="ml-auto flex flex-wrap items-center gap-2">
+                    <div className="ml-auto flex flex-wrap items-center gap-3">
+                        <span className="text-xs text-muted-foreground">
+                            Hiển thị {products.length}
+                            {totalProducts ? `/${totalProducts}` : ''} sản phẩm
+                        </span>
                         <Button
                             type="button"
                             variant="outline"
@@ -276,120 +290,130 @@ export function ProductsPage() {
             )}
 
             {/* Products Grid */}
-            {isLoading ? (
+            {isInitialLoading ? (
                 <div className="text-center text-muted-foreground">Đang tải...</div>
-            ) : !products || products.length === 0 ? (
+            ) : isEmpty ? (
                 <div className="rounded-lg border-2 border-dashed p-12 text-center text-muted-foreground">
                     {searchQuery ? `Không tìm thấy sản phẩm '${searchQuery}'` : 'Chưa có sản phẩm nào'}
                 </div>
             ) : (
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                    {products.map((product) => {
-                        const isSelected = selectedProductIds.includes(product.id)
-                        const coverImage = product.images?.[0]
-                        return (
-                            <Card
-                                key={product.id}
-                                className={cn(
-                                    "group relative cursor-pointer transition-shadow hover:shadow-md",
-                                    isSelected && "border-primary shadow-lg"
-                                )}
-                                onClick={() => handleCardClick(product)}
-                            >
-                                <div className="absolute right-3 top-3 z-10 rounded-lg bg-background/80 p-1.5 shadow">
-                                    <input
-                                        type="checkbox"
-                                        className="h-5 w-5 cursor-pointer"
-                                        checked={isSelected}
-                                        onChange={(event) => {
-                                            event.stopPropagation()
-                                            toggleProductSelection(product.id)
-                                        }}
-                                        onClick={(event) => event.stopPropagation()}
-                                        aria-label="Chọn sản phẩm"
-                                    />
-                                </div>
-                                <div className="h-40 w-full overflow-hidden rounded-t-lg border-b bg-muted">
-                                    {coverImage ? (
-                                        <img
-                                            src={getProductImageUrl(coverImage)}
-                                            alt={product.name}
-                                            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                <>
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                        {products.map((product) => {
+                            const isSelected = selectedProductIds.includes(product.id)
+                            const coverImage = product.images?.[0]
+                            return (
+                                <Card
+                                    key={product.id}
+                                    className={cn(
+                                        "group relative cursor-pointer transition-shadow hover:shadow-md",
+                                        isSelected && "border-primary shadow-lg"
+                                    )}
+                                    onClick={() => handleCardClick(product)}
+                                >
+                                    <div className="absolute right-3 top-3 z-10 rounded-lg bg-background/80 p-1.5 shadow">
+                                        <input
+                                            type="checkbox"
+                                            className="h-5 w-5 cursor-pointer"
+                                            checked={isSelected}
+                                            onChange={(event) => {
+                                                event.stopPropagation()
+                                                toggleProductSelection(product.id)
+                                            }}
+                                            onClick={(event) => event.stopPropagation()}
+                                            aria-label="Chọn sản phẩm"
                                         />
-                                    ) : (
-                                        <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-gradient-to-b from-slate-50 to-slate-100 text-muted-foreground">
-                                            <ImageOff className="h-6 w-6" />
-                                            <span className="text-sm font-medium">Chưa có ảnh</span>
-                                        </div>
-                                    )}
-                                </div>
-                                <CardHeader>
-                                    <CardTitle>
-                                        {searchQuery.trim() ? (
-                                            <SearchHighlight text={product.name} query={searchQuery} />
-                                        ) : (
-                                            product.name
-                                        )}
-                                    </CardTitle>
-                                </CardHeader>
-                                <CardContent className="space-y-2">
-                                    <div className="space-y-1">
-                                        <p className="text-lg font-bold text-green-600">
-                                            💰 {formatCurrency(product.price)}
-                                        </p>
                                     </div>
-                                    {product.category && (
-                                        <p className="text-sm text-muted-foreground">
-                                            📁 {searchQuery.trim() ? (
-                                                <SearchHighlight text={product.category} query={searchQuery} />
+                                    <div className="h-40 w-full overflow-hidden rounded-t-lg border-b bg-muted">
+                                        {coverImage ? (
+                                            <img
+                                                src={getProductImageUrl(coverImage)}
+                                                alt={product.name}
+                                                className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                                            />
+                                        ) : (
+                                            <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-gradient-to-b from-slate-50 to-slate-100 text-muted-foreground">
+                                                <ImageOff className="h-6 w-6" />
+                                                <span className="text-sm font-medium">Chưa có ảnh</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <CardHeader>
+                                        <CardTitle>
+                                            {searchQuery.trim() ? (
+                                                <SearchHighlight text={product.name} query={searchQuery} />
                                             ) : (
-                                                product.category
+                                                product.name
                                             )}
-                                        </p>
-                                    )}
-                                    {product.unit && (
-                                        <p className="text-sm text-muted-foreground">📦 Đơn vị: {product.unit}</p>
-                                    )}
-                                    {product.description && (
-                                        <p className="line-clamp-2 text-sm text-muted-foreground">
-                                            📝 {searchQuery.trim() ? (
-                                                <SearchHighlight text={product.description} query={searchQuery} />
-                                            ) : (
-                                                product.description
-                                            )}
-                                        </p>
-                                    )}
-                                </CardContent>
-                                <CardFooter className="gap-2">
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        className="flex-1"
-                                        onClick={(event) => {
-                                            event.stopPropagation()
-                                            setEditingProduct(product)
-                                        }}
-                                    >
-                                        <Pencil className="mr-1 h-4 w-4" />
-                                        Sửa
-                                    </Button>
-                                    <Button
-                                        variant="destructive"
-                                        size="sm"
-                                        className="flex-1"
-                                        onClick={async (event) => {
-                                            event.stopPropagation()
-                                            await handleDelete(product.id)
-                                        }}
-                                    >
-                                        <Trash2 className="mr-1 h-4 w-4" />
-                                        Xóa
-                                    </Button>
-                                </CardFooter>
-                            </Card>
-                        )
-                    })}
-                </div>
+                                        </CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="space-y-2">
+                                        <div className="space-y-1">
+                                            <p className="text-lg font-bold text-green-600">
+                                                💰 {formatCurrency(product.price)}
+                                            </p>
+                                        </div>
+                                        {product.category && (
+                                            <p className="text-sm text-muted-foreground">
+                                                📁 {searchQuery.trim() ? (
+                                                    <SearchHighlight text={product.category} query={searchQuery} />
+                                                ) : (
+                                                    product.category
+                                                )}
+                                            </p>
+                                        )}
+                                        {product.unit && (
+                                            <p className="text-sm text-muted-foreground">📦 Đơn vị: {product.unit}</p>
+                                        )}
+                                        {product.description && (
+                                            <p className="line-clamp-2 text-sm text-muted-foreground">
+                                                📝 {searchQuery.trim() ? (
+                                                    <SearchHighlight text={product.description} query={searchQuery} />
+                                                ) : (
+                                                    product.description
+                                                )}
+                                            </p>
+                                        )}
+                                    </CardContent>
+                                    <CardFooter className="gap-2">
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="flex-1"
+                                            onClick={(event) => {
+                                                event.stopPropagation()
+                                                setEditingProduct(product)
+                                            }}
+                                        >
+                                            <Pencil className="mr-1 h-4 w-4" />
+                                            Sửa
+                                        </Button>
+                                        <Button
+                                            variant="destructive"
+                                            size="sm"
+                                            className="flex-1"
+                                            onClick={async (event) => {
+                                                event.stopPropagation()
+                                                await handleDelete(product.id)
+                                            }}
+                                        >
+                                            <Trash2 className="mr-1 h-4 w-4" />
+                                            Xóa
+                                        </Button>
+                                    </CardFooter>
+                                </Card>
+                            )
+                        })}
+                    </div>
+                    {(hasNextPage || isFetchingNextPage) && (
+                        <div
+                            ref={loadMoreRef}
+                            className="mt-6 flex items-center justify-center text-sm text-muted-foreground"
+                        >
+                            {isFetchingNextPage ? 'Đang tải thêm...' : 'Kéo xuống để tải thêm sản phẩm'}
+                        </div>
+                    )}
+                </>
             )}
 
             {/* Dialogs */}
