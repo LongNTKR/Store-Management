@@ -48,6 +48,8 @@ venv.bak/
 # Data folder (database, images, invoices, etc.)
 data/*
 !data/.gitkeep
+backend/data/*
+!backend/data/.gitkeep
 
 # Google credentials
 *credentials*.json
