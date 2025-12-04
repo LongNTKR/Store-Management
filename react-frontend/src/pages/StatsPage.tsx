@@ -21,7 +21,9 @@ export function StatsPage() {
     return (
         <div className="space-y-6">
             <div>
-                <h1 className="mb-2 text-3xl font-bold">📊 Thống Kê & Báo Cáo</h1>
+                <h1 className="mb-2 text-3xl font-bold">
+                    <img alt="Product Management Icon" className="h-24 w-24 inline-block" src="/Image_dtv8tsdtv8tsdtv8.png"></img> Thống Kê & Báo Cáo
+                </h1>
                 <p className="text-muted-foreground">Tổng quan hệ thống: sản phẩm, khách hàng, hóa đơn, doanh thu.</p>
             </div>
 
