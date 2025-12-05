@@ -15,18 +15,22 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { useUpdateProduct } from '@/hooks/useProducts'
+import { useUnits } from '@/hooks/useUnits'
 import type { Product } from '@/types'
 import { productService } from '@/services/products'
 import { toast } from 'sonner'
 import { getProductImageUrl } from '@/lib/utils'
 import { MAX_PRODUCT_IMAGES } from '@/constants/products'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { UnitManagementDialog } from '@/components/units/UnitManagementDialog'
+import { Settings } from 'lucide-react'
 
 const productSchema = z.object({
     name: z.string().min(1, 'Vui lòng nhập tên sản phẩm'),
     price: z.number().positive('Giá bán phải lớn hơn 0').optional(),
     import_price: z.number().positive('Giá nhập phải lớn hơn 0').optional(),
     category: z.string().optional(),
-    unit: z.string(),
+    unit_id: z.number().min(1, 'Vui lòng chọn đơn vị'),
     description: z.string().optional(),
 })
 
@@ -47,10 +51,13 @@ export function EditProductDialog({ product, open, onOpenChange }: EditProductDi
     const [newPreviewUrls, setNewPreviewUrls] = useState<string[]>([])
     const [isImageUploading, setIsImageUploading] = useState(false)
     const [removingImage, setRemovingImage] = useState<string | null>(null)
+    const { data: units = [] } = useUnits()
 
     const {
         register,
         handleSubmit,
+        setValue,
+        watch,
         formState: { errors },
     } = useForm<ProductFormData>({
         resolver: zodResolver(productSchema),
@@ -59,10 +66,13 @@ export function EditProductDialog({ product, open, onOpenChange }: EditProductDi
             price: product.price,
             import_price: product.import_price || undefined,
             category: product.category || '',
-            unit: product.unit,
+            unit_id: product.unit.id,
             description: product.description || '',
         },
     })
+
+    const selectedUnitId = watch('unit_id')
+    const [showUnitManagement, setShowUnitManagement] = useState(false)
 
     useEffect(() => {
         setExistingImages(product.images || [])
@@ -169,8 +179,8 @@ export function EditProductDialog({ product, open, onOpenChange }: EditProductDi
             }
 
             // Handle unit - only if changed
-            if (data.unit !== product.unit) {
-                changes.unit = data.unit
+            if (data.unit_id !== product.unit.id) {
+                changes.unit_id = data.unit_id
             }
 
             // Handle description - treat empty string as null for comparison
@@ -205,157 +215,198 @@ export function EditProductDialog({ product, open, onOpenChange }: EditProductDi
     }
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-[600px]">
-                <DialogHeader>
-                    <DialogTitle>✏️ Chỉnh Sửa Sản Phẩm</DialogTitle>
-                </DialogHeader>
+        <>
+            <Dialog open={open} onOpenChange={onOpenChange}>
+                <DialogContent className="sm:max-w-[600px]">
+                    <DialogHeader>
+                        <DialogTitle>✏️ Chỉnh Sửa Sản Phẩm</DialogTitle>
+                    </DialogHeader>
 
-                <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-                    <div className="space-y-2">
-                        <Label htmlFor="name">Tên sản phẩm *</Label>
-                        <Input
-                            id="name"
-                            placeholder="Ví dụ: Coca Cola"
-                            {...register('name')}
-                        />
-                        {errors.name && (
-                            <p className="text-sm text-destructive">{errors.name.message}</p>
-                        )}
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
+                    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
                         <div className="space-y-2">
-                            <Label htmlFor="import_price">Giá nhập (VNĐ)</Label>
+                            <Label htmlFor="name">Tên sản phẩm *</Label>
                             <Input
-                                id="import_price"
-                                type="number"
-                                step="0.01"
-                                placeholder="Để trống nếu chưa có giá"
-                                {...register('import_price', {
-                                    setValueAs: (v) => v === '' || v === null ? undefined : parseFloat(v)
-                                })}
+                                id="name"
+                                placeholder="Ví dụ: Coca Cola"
+                                {...register('name')}
                             />
-                            {errors.import_price && (
-                                <p className="text-sm text-destructive">{errors.import_price.message}</p>
+                            {errors.name && (
+                                <p className="text-sm text-destructive">{errors.name.message}</p>
                             )}
                         </div>
 
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="import_price">Giá nhập (VNĐ)</Label>
+                                <Input
+                                    id="import_price"
+                                    type="number"
+                                    step="0.01"
+                                    placeholder="Để trống nếu chưa có giá"
+                                    {...register('import_price', {
+                                        setValueAs: (v) => v === '' || v === null ? undefined : parseFloat(v)
+                                    })}
+                                />
+                                {errors.import_price && (
+                                    <p className="text-sm text-destructive">{errors.import_price.message}</p>
+                                )}
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label htmlFor="price">Giá bán (VNĐ)</Label>
+                                <Input
+                                    id="price"
+                                    type="number"
+                                    step="0.01"
+                                    placeholder="Để trống nếu chưa có giá"
+                                    {...register('price', {
+                                        setValueAs: (v) => v === '' || v === null ? undefined : parseFloat(v)
+                                    })}
+                                />
+                                {errors.price && (
+                                    <p className="text-sm text-destructive">{errors.price.message}</p>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="category">Danh mục</Label>
+                                <Input
+                                    id="category"
+                                    placeholder="Ví dụ: Đồ uống"
+                                    {...register('category')}
+                                />
+                            </div>
+
+                            <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                    <Label htmlFor="unit">Đơn vị</Label>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => setShowUnitManagement(true)}
+                                        className="h-6 px-2 text-xs"
+                                    >
+                                        <Settings className="h-3 w-3 mr-1" />
+                                        Quản lý
+                                    </Button>
+                                </div>
+                                <Select
+                                    value={selectedUnitId?.toString()}
+                                    onValueChange={(value) => setValue('unit_id', parseInt(value))}
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Chọn đơn vị" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {units.map((unit) => (
+                                            <SelectItem key={unit.id} value={unit.id.toString()}>
+                                                {unit.display_name}
+                                                {unit.allows_decimal && ' (số thập phân)'}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                {errors.unit_id && (
+                                    <p className="text-sm text-red-500">{errors.unit_id.message}</p>
+                                )}
+                            </div>
+                        </div>
+
                         <div className="space-y-2">
-                            <Label htmlFor="price">Giá bán (VNĐ)</Label>
-                            <Input
-                                id="price"
-                                type="number"
-                                step="0.01"
-                                placeholder="Để trống nếu chưa có giá"
-                                {...register('price', {
-                                    setValueAs: (v) => v === '' || v === null ? undefined : parseFloat(v)
-                                })}
+                            <Label htmlFor="description">Mô tả</Label>
+                            <Textarea
+                                id="description"
+                                placeholder="Mô tả sản phẩm..."
+                                {...register('description')}
                             />
-                            {errors.price && (
-                                <p className="text-sm text-destructive">{errors.price.message}</p>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label>Hình ảnh hiện tại</Label>
+                            {existingImages.length === 0 ? (
+                                <p className="text-sm text-muted-foreground">Chưa có ảnh nào cho sản phẩm này.</p>
+                            ) : (
+                                <div className="grid grid-cols-3 gap-2">
+                                    {existingImages.map((image) => (
+                                        <div key={image} className="relative rounded border p-1">
+                                            <img
+                                                src={getProductImageUrl(image)}
+                                                alt="Ảnh sản phẩm"
+                                                className="h-20 w-full rounded object-cover"
+                                            />
+                                            <Button
+                                                type="button"
+                                                size="icon"
+                                                variant="outline"
+                                                className="absolute right-1 top-1 h-6 w-6 rounded-full bg-white/90 text-xs text-destructive"
+                                                onClick={() => handleExistingImageDelete(image)}
+                                                disabled={removingImage === image || updateProduct.isPending}
+                                            >
+                                                {removingImage === image ? '…' : '✕'}
+                                            </Button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                            <p className="text-xs text-muted-foreground">
+                                Tối đa {MAX_PRODUCT_IMAGES} ảnh/sản phẩm. Bạn có thể xóa ảnh cũ trước khi thêm ảnh mới.
+                            </p>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label htmlFor="new-images">Thêm ảnh mới</Label>
+                            <Input
+                                id="new-images"
+                                type="file"
+                                accept="image/*"
+                                multiple
+                                onChange={handleNewImagesSelection}
+                            />
+                            {newPreviewUrls.length > 0 && (
+                                <div className="grid grid-cols-3 gap-2 pt-2">
+                                    {newPreviewUrls.map((url, index) => (
+                                        <div key={url} className="relative rounded border p-1">
+                                            <img
+                                                src={url}
+                                                alt={`Ảnh mới ${index + 1}`}
+                                                className="h-20 w-full rounded object-cover"
+                                            />
+                                            <button
+                                                type="button"
+                                                className="absolute right-1 top-1 rounded bg-white/80 px-1 text-xs text-destructive"
+                                                onClick={() => handleRemoveNewImage(index)}
+                                            >
+                                                ✕
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
                             )}
                         </div>
-                    </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="category">Danh mục</Label>
-                            <Input
-                                id="category"
-                                placeholder="Ví dụ: Đồ uống"
-                                {...register('category')}
-                            />
-                        </div>
+                        <DialogFooter className="gap-2">
+                            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                                ❌ Hủy
+                            </Button>
+                            <Button type="submit" disabled={updateProduct.isPending || isImageUploading}>
+                                💾 Lưu thay đổi
+                            </Button>
+                        </DialogFooter>
+                    </form>
+                </DialogContent>
+            </Dialog>
 
-                        <div className="space-y-2">
-                            <Label htmlFor="unit">Đơn vị</Label>
-                            <Input id="unit" {...register('unit')} />
-                        </div>
-                    </div>
-
-                    <div className="space-y-2">
-                        <Label htmlFor="description">Mô tả</Label>
-                        <Textarea
-                            id="description"
-                            placeholder="Mô tả sản phẩm..."
-                            {...register('description')}
-                        />
-                    </div>
-
-                    <div className="space-y-2">
-                        <Label>Hình ảnh hiện tại</Label>
-                        {existingImages.length === 0 ? (
-                            <p className="text-sm text-muted-foreground">Chưa có ảnh nào cho sản phẩm này.</p>
-                        ) : (
-                            <div className="grid grid-cols-3 gap-2">
-                                {existingImages.map((image) => (
-                                    <div key={image} className="relative rounded border p-1">
-                                        <img
-                                            src={getProductImageUrl(image)}
-                                            alt="Ảnh sản phẩm"
-                                            className="h-20 w-full rounded object-cover"
-                                        />
-                                        <Button
-                                            type="button"
-                                            size="icon"
-                                            variant="outline"
-                                            className="absolute right-1 top-1 h-6 w-6 rounded-full bg-white/90 text-xs text-destructive"
-                                            onClick={() => handleExistingImageDelete(image)}
-                                            disabled={removingImage === image || updateProduct.isPending}
-                                        >
-                                            {removingImage === image ? '…' : '✕'}
-                                        </Button>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                        <p className="text-xs text-muted-foreground">
-                            Tối đa {MAX_PRODUCT_IMAGES} ảnh/sản phẩm. Bạn có thể xóa ảnh cũ trước khi thêm ảnh mới.
-                        </p>
-                    </div>
-
-                    <div className="space-y-2">
-                        <Label htmlFor="new-images">Thêm ảnh mới</Label>
-                        <Input
-                            id="new-images"
-                            type="file"
-                            accept="image/*"
-                            multiple
-                            onChange={handleNewImagesSelection}
-                        />
-                        {newPreviewUrls.length > 0 && (
-                            <div className="grid grid-cols-3 gap-2 pt-2">
-                                {newPreviewUrls.map((url, index) => (
-                                    <div key={url} className="relative rounded border p-1">
-                                        <img
-                                            src={url}
-                                            alt={`Ảnh mới ${index + 1}`}
-                                            className="h-20 w-full rounded object-cover"
-                                        />
-                                        <button
-                                            type="button"
-                                            className="absolute right-1 top-1 rounded bg-white/80 px-1 text-xs text-destructive"
-                                            onClick={() => handleRemoveNewImage(index)}
-                                        >
-                                            ✕
-                                        </button>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-
-                    <DialogFooter className="gap-2">
-                        <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-                            ❌ Hủy
-                        </Button>
-                        <Button type="submit" disabled={updateProduct.isPending || isImageUploading}>
-                            💾 Lưu thay đổi
-                        </Button>
-                    </DialogFooter>
-                </form>
-            </DialogContent>
-        </Dialog>
+            <UnitManagementDialog
+                open={showUnitManagement}
+                onOpenChange={setShowUnitManagement}
+                onUnitSelect={(unitId) => {
+                    setValue('unit_id', unitId)
+                    setShowUnitManagement(false)
+                }}
+            />
+        </>
     )
 }

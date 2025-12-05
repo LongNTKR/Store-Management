@@ -264,13 +264,39 @@ async def confirm_import(
                 skipped_count += 1
                 continue
 
-            elif item.action == 'create':
+            # Map unit string to unit_id (find or create)
+            unit_id = None
+            if item.unit:
+                from database.models import Unit
+                # Try to find existing unit by name
+                unit = db.query(Unit).filter(Unit.name == item.unit.lower()).first()
+                if not unit:
+                    # Create new unit if not found
+                    from database.models import get_vn_time
+                    unit = Unit(
+                        name=item.unit.lower(),
+                        display_name=item.unit.capitalize(),
+                        allows_decimal=False,  # Default to integer
+                        step_size=1.0,
+                        is_active=True,
+                        is_system=False,
+                        created_at=get_vn_time(),
+                        updated_at=get_vn_time()
+                    )
+                    db.add(unit)
+                    db.flush()  # Get the ID without committing
+                unit_id = unit.id
+            else:
+                # Default to unit ID 1 (typically "cái")
+                unit_id = 1
+
+            if item.action == 'create':
                 # Create new product
                 product_service.create_product(
                     name=item.name,
                     price=item.price,
                     import_price=item.import_price,
-                    unit=item.unit,
+                    unit_id=unit_id,
                     category=item.category,
                     description=None,
                     stock_quantity=0
@@ -294,7 +320,7 @@ async def confirm_import(
                     name=item.name,
                     price=item.price,
                     import_price=item.import_price,
-                    unit=item.unit,
+                    unit_id=unit_id,
                     category=item.category
                 )
                 updated_count += 1

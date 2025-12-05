@@ -128,15 +128,18 @@ async def get_product(product_id: int, db: Session = Depends(get_db)):
 async def create_product(product: ProductCreate, db: Session = Depends(get_db)):
     """Create a new product"""
     product_service = _get_product_service(db)
-    new_product = product_service.create_product(
-        name=product.name,
-        price=product.price,
-        import_price=product.import_price,
-        description=product.description,
-        category=product.category,
-        unit=product.unit,
-    )
-    return new_product
+    try:
+        new_product = product_service.create_product(
+            name=product.name,
+            price=product.price,
+            import_price=product.import_price,
+            description=product.description,
+            category=product.category,
+            unit_id=product.unit_id,
+        )
+        return new_product
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.put("/products/{product_id}", response_model=Product)

@@ -20,6 +20,30 @@ def get_vn_time():
     return datetime.now(VN_TZ)
 
 
+class Unit(Base):
+    """Unit model - stores measurement units with calculation rules."""
+
+    __tablename__ = 'units'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(50), unique=True, nullable=False, index=True)  # e.g., "cái", "kg", "mét"
+    display_name = Column(String(100), nullable=False)  # User-friendly name
+    allows_decimal = Column(Boolean, default=False)  # True for kg/mét, False for cái/chiếc
+    step_size = Column(Float, default=1.0)  # Increment step (1.0 for integer, 0.1 or 0.01 for decimal)
+    is_active = Column(Boolean, default=True)
+    is_system = Column(Boolean, default=False)  # System units cannot be deleted
+
+    # Metadata (using UTC+7 timezone)
+    created_at = Column(DateTime, default=get_vn_time)
+    updated_at = Column(DateTime, default=get_vn_time, onupdate=get_vn_time)
+
+    # Relationships
+    products = relationship('Product', back_populates='unit_ref')
+
+    def __repr__(self):
+        return f"<Unit(id={self.id}, name='{self.name}', allows_decimal={self.allows_decimal})>"
+
+
 class Product(Base):
     """Product model - stores product information."""
 
@@ -32,7 +56,8 @@ class Product(Base):
     import_price = Column(Float, nullable=True)  # giá nhập (có thể không nhập)
     description = Column(Text, nullable=True)
     category = Column(String(100), nullable=True, index=True)
-    unit = Column(String(50), default='cái')  # đơn vị: cái, hộp, kg, etc.
+    unit = Column(String(50), default='cái')  # đơn vị: cái, hộp, kg, etc. (DEPRECATED - will be removed)
+    unit_id = Column(Integer, ForeignKey('units.id'), nullable=True)  # Foreign key to units table
     stock_quantity = Column(Integer, default=0)
 
     # Images stored as comma-separated paths
@@ -50,6 +75,7 @@ class Product(Base):
     info_updated_at = Column(DateTime, nullable=True, index=True)  # Last info update (name, category, desc, unit)
 
     # Relationships
+    unit_ref = relationship('Unit', back_populates='products')
     invoice_items = relationship('InvoiceItem', back_populates='product')
     # Price history is read-only from Product side to prevent SQLAlchemy from trying to manage it
     # Price history should only be created/modified through ProductService methods
@@ -172,7 +198,7 @@ class InvoiceItem(Base):
     # Product details (snapshot at time of purchase)
     product_name = Column(String(255), nullable=False)
     product_price = Column(Float, nullable=False)
-    quantity = Column(Integer, nullable=False, default=1)
+    quantity = Column(Float, nullable=False, default=1)  # Changed to Float to support decimal quantities (e.g., 0.5 kg)
     unit = Column(String(50), default='cái')
 
     # Calculated

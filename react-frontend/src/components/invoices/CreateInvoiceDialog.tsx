@@ -104,11 +104,25 @@ export function CreateInvoiceDialog({
                     id: item.product_id ?? -item.id,
                     name: item.product_name,
                     price: item.product_price,
-                    unit: item.unit,
+                    unit: {
+                        id: 0,
+                        name: item.unit,
+                        display_name: item.unit,
+                        allows_decimal: true, // Assume decimal allowed for editing existing invoices
+                        step_size: 0.01,
+                        is_active: true,
+                        is_system: false,
+                        created_at: '',
+                        updated_at: ''
+                    },
                     stock_quantity: 0,
                     created_at: invoiceToEdit.created_at,
                     updated_at: invoiceToEdit.updated_at,
                     is_active: true,
+                    is_new: false,
+                    recently_updated_price: false,
+                    recently_updated_import_price: false,
+                    recently_updated_info: false,
                 } as Product,
                 quantity: item.quantity,
             }))
@@ -646,13 +660,19 @@ export function CreateInvoiceDialog({
                                                 </div>
 
                                                 <div className="mt-2 flex items-center justify-between gap-3">
-                                                    <Input
-                                                        type="number"
-                                                        min="1"
-                                                        value={item.quantity}
-                                                        onChange={(e) => updateQuantity(item.product.id, Number(e.target.value))}
-                                                        className="w-24 text-center"
-                                                    />
+                                                    <div className="flex flex-col items-center gap-1">
+                                                        <Input
+                                                            type="number"
+                                                            min={item.product.unit.allows_decimal ? "0.01" : "1"}
+                                                            step={item.product.unit.step_size}
+                                                            value={item.quantity}
+                                                            onChange={(e) => updateQuantity(item.product.id, parseFloat(e.target.value) || 0)}
+                                                            className="w-24 text-center"
+                                                        />
+                                                        <span className="text-xs text-muted-foreground">
+                                                            {item.product.unit.display_name}
+                                                        </span>
+                                                    </div>
                                                     <div className="text-sm font-semibold">
                                                         {item.product.price ? (item.product.price * item.quantity).toLocaleString('vi-VN') : '0'}đ
                                                     </div>

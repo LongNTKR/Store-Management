@@ -6,7 +6,7 @@ from datetime import datetime
 class InvoiceItemCreate(BaseModel):
     """Schema for creating invoice items"""
     product_id: int = Field(..., description="ID of the product")
-    quantity: int = Field(..., gt=0, description="Quantity must be greater than 0")
+    quantity: float = Field(..., gt=0, description="Quantity must be greater than 0 (supports decimals)")
 
 
 class InvoiceCreate(BaseModel):
@@ -71,7 +71,7 @@ class InvoiceItem(BaseModel):
     product_id: int
     product_name: str
     product_price: float
-    quantity: int
+    quantity: float  # Changed to float to support decimal quantities
     unit: str
     subtotal: float
 

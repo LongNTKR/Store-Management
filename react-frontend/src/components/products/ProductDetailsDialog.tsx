@@ -153,7 +153,7 @@ export function ProductDetailsDialog({ product, open, onOpenChange }: ProductDet
                             <p className="text-sm text-muted-foreground">📁 Danh mục: {product.category}</p>
                         )}
                         {product.unit && (
-                            <p className="text-sm text-muted-foreground">📦 Đơn vị: {product.unit}</p>
+                            <p className="text-sm text-muted-foreground">📦 Đơn vị: {product.unit.display_name}</p>
                         )}
                     </div>
 

@@ -1,3 +1,30 @@
+export interface Unit {
+    id: number
+    name: string
+    display_name: string
+    allows_decimal: boolean
+    step_size: number
+    is_active: boolean
+    is_system: boolean
+    created_at: string
+    updated_at: string
+}
+
+export interface UnitCreate {
+    name: string
+    display_name: string
+    allows_decimal: boolean
+    step_size: number
+}
+
+export interface UnitUpdate {
+    name?: string
+    display_name?: string
+    allows_decimal?: boolean
+    step_size?: number
+    is_active?: boolean
+}
+
 export interface Product {
     id: number
     name: string
@@ -5,7 +32,7 @@ export interface Product {
     import_price?: number
     description?: string
     category?: string
-    unit: string
+    unit: Unit  // Changed from string to nested Unit object
     stock_quantity: number
     image_paths?: string | null
     created_at: string

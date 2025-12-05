@@ -1,7 +1,8 @@
-from pydantic import BaseModel, Field, computed_field
-from typing import Optional, List
+from pydantic import BaseModel, Field, computed_field, model_validator
+from typing import Optional, List, Any
 from datetime import datetime, timedelta
 import pytz
+from schemas.unit import Unit
 
 
 class ProductBase(BaseModel):
@@ -10,7 +11,7 @@ class ProductBase(BaseModel):
     import_price: Optional[float] = None
     description: Optional[str] = None
     category: Optional[str] = None
-    unit: str = "cái"
+    unit_id: int  # Foreign key to units table
     stock_quantity: int = 0
 
 
@@ -24,12 +25,20 @@ class ProductUpdate(BaseModel):
     import_price: Optional[float] = None
     description: Optional[str] = None
     category: Optional[str] = None
-    unit: Optional[str] = None
+    unit_id: Optional[int] = None  # Foreign key to units table
     stock_quantity: Optional[int] = None
 
 
-class Product(ProductBase):
+class Product(BaseModel):
+    # Note: Not inheriting from ProductBase to customize unit field
     id: int
+    name: str
+    price: Optional[float] = None
+    import_price: Optional[float] = None
+    description: Optional[str] = None
+    category: Optional[str] = None
+    unit: Unit  # Nested unit object from relationship
+    stock_quantity: int = 0
     images: List[str] = []
     image_paths: Optional[str] = None
     created_at: datetime
@@ -41,6 +50,26 @@ class Product(ProductBase):
     price_updated_at: Optional[datetime] = None
     import_price_updated_at: Optional[datetime] = None
     info_updated_at: Optional[datetime] = None
+    
+    @model_validator(mode='before')
+    @classmethod
+    def populate_unit_from_relationship(cls, data: Any) -> Any:
+        """Map unit_ref relationship to unit field for Pydantic serialization."""
+        # Handle both dict and ORM object
+        if isinstance(data, dict):
+            # If unit_ref exists in dict, map it to unit
+            if 'unit_ref' in data and data['unit_ref']:
+                data['unit'] = data['unit_ref']
+        else:
+            # For ORM objects, check unit_ref attribute
+            if hasattr(data, 'unit_ref') and data.unit_ref:
+                # Convert ORM object to dict and set unit from unit_ref
+                if not hasattr(data, '__dict__'):
+                    return data
+                data_dict = {k: v for k, v in data.__dict__.items() if not k.startswith('_')}
+                data_dict['unit'] = data.unit_ref
+                return data_dict
+        return data
 
     @computed_field
     @property

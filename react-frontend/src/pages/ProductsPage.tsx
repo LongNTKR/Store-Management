@@ -453,7 +453,7 @@ export function ProductsPage() {
                                             </p>
                                         )}
                                         {product.unit && (
-                                            <p className="text-sm text-muted-foreground">📦 Đơn vị: {product.unit}</p>
+                                            <p className="text-sm text-muted-foreground">📦 Đơn vị: {product.unit.display_name}</p>
                                         )}
                                         {product.description && (
                                             <p className="line-clamp-2 text-sm text-muted-foreground">

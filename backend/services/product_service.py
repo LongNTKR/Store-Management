@@ -5,12 +5,12 @@ import os
 import uuid
 from typing import List, Optional, Dict, Tuple
 from datetime import datetime
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, and_, text
 from unidecode import unidecode
 from rapidfuzz import fuzz, process
 
-from database.models import Product, PriceHistory
+from database.models import Product, PriceHistory, Unit
 from services.ocr_service import OCRService
 from config import Config
 
@@ -145,7 +145,7 @@ class ProductService:
         import_price: Optional[float] = None,
         description: Optional[str] = None,
         category: Optional[str] = None,
-        unit: str = 'cái',
+        unit_id: int = 1,  # Default to first unit ("cái")
         stock_quantity: int = 0,
         image_paths: Optional[List[str]] = None
     ) -> Product:
@@ -158,13 +158,18 @@ class ProductService:
             import_price: Product import/cost price (optional)
             description: Product description
             category: Product category
-            unit: Unit of measurement
+            unit_id: ID of the unit (foreign key to units table)
             stock_quantity: Initial stock quantity
             image_paths: List of image file paths
 
         Returns:
             Created Product object
         """
+        # Validate unit exists
+        unit = self.db.query(Unit).filter(Unit.id == unit_id).first()
+        if not unit:
+            raise ValueError(f"Unit with ID {unit_id} not found")
+        
         product = Product(
             name=name,
             normalized_name=normalize_vietnamese(name),
@@ -172,7 +177,7 @@ class ProductService:
             import_price=import_price,
             description=description,
             category=category,
-            unit=unit,
+            unit_id=unit_id,
             stock_quantity=stock_quantity
         )
 
@@ -188,7 +193,7 @@ class ProductService:
 
     def get_product(self, product_id: int) -> Optional[Product]:
         """
-        Get product by ID.
+        Get product by ID with unit relationship eagerly loaded.
 
         Args:
             product_id: Product ID
@@ -196,7 +201,7 @@ class ProductService:
         Returns:
             Product object or None
         """
-        return self.db.query(Product).filter(Product.id == product_id).first()
+        return self.db.query(Product).options(joinedload(Product.unit_ref)).filter(Product.id == product_id).first()
 
     def get_product_by_name(self, name: str) -> Optional[Product]:
         """
@@ -333,7 +338,7 @@ class ProductService:
         if not product_ids:
             return []
 
-        return self.db.query(Product).filter(Product.id.in_(product_ids)).all()
+        return self.db.query(Product).options(joinedload(Product.unit_ref)).filter(Product.id.in_(product_ids)).all()
 
     def _search_normalized(
         self,
@@ -442,7 +447,7 @@ class ProductService:
 
     def get_all_products(self, is_active: bool = True) -> List[Product]:
         """
-        Get all products.
+        Get all products with unit relationships eagerly loaded.
 
         Args:
             is_active: Filter by active status
@@ -450,14 +455,14 @@ class ProductService:
         Returns:
             List of all products
         """
-        return self.db.query(Product).filter(Product.is_active == is_active).all()
+        return self.db.query(Product).options(joinedload(Product.unit_ref)).filter(Product.is_active == is_active).all()
 
     def get_products_page(self, limit: int = 30, offset: int = 0, is_active: bool = True) -> Tuple[List[Product], int, bool, Optional[int]]:
         """
         Get a paginated list of products with total count and has_more flag.
         """
         safe_limit, safe_offset = self._normalize_page_params(limit, offset)
-        base_query = self.db.query(Product).filter(Product.is_active == is_active)
+        base_query = self.db.query(Product).options(joinedload(Product.unit_ref)).filter(Product.is_active == is_active)
 
         total = base_query.count()
         items, has_more = self._fetch_with_pagination(
@@ -539,7 +544,7 @@ class ProductService:
         import_price: Optional[float] = None,
         description: Optional[str] = None,
         category: Optional[str] = None,
-        unit: Optional[str] = None,
+        unit_id: Optional[int] = None,
         stock_quantity: Optional[int] = None,
         image_paths: Optional[List[str]] = None,
         price_change_reason: str = "Manual update"
@@ -554,7 +559,7 @@ class ProductService:
             import_price: New import/cost price
             description: New description
             category: New category
-            unit: New unit
+            unit_id: New unit ID (foreign key to units table)
             stock_quantity: New stock quantity
             image_paths: New image paths
             price_change_reason: Reason for logging price changes
@@ -567,6 +572,12 @@ class ProductService:
         product = self.get_product(product_id)
         if not product:
             return None
+
+        # Validate unit if provided
+        if unit_id is not None:
+            unit = self.db.query(Unit).filter(Unit.id == unit_id).first()
+            if not unit:
+                raise ValueError(f"Unit with ID {unit_id} not found")
 
         # Track price change
         if price is not None and price != product.price:
@@ -595,8 +606,8 @@ class ProductService:
             product.description = description
             info_changed = True
 
-        if unit is not None and unit != product.unit:
-            product.unit = unit
+        if unit_id is not None and unit_id != product.unit_id:
+            product.unit_id = unit_id
             info_changed = True
         
         if info_changed:
