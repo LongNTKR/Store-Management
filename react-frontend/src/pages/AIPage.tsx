@@ -1,14 +1,18 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, type ChangeEvent } from 'react'
+import { useMutation } from '@tanstack/react-query'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/hooks/use-toast'
-import { Key, Lock, Eye, EyeOff, Trash2, Save, Shield, RefreshCw } from 'lucide-react'
+import { Key, Lock, Eye, EyeOff, Trash2, Save, Shield, RefreshCw, Loader2, UploadCloud } from 'lucide-react'
 import { aiConfigService, type AIModelInfo } from '@/services/aiConfig'
 import type { AIConfig } from '@/services/aiConfig'
+import { searchService } from '@/services/search'
+import type { ImportResult } from '@/types'
 import {
     Select,
     SelectContent,
@@ -50,6 +54,15 @@ export function AIPage() {
     // Model selection states
     const [availableModels, setAvailableModels] = useState<Record<string, AIModelInfo[]>>({})
     const [loadingModels, setLoadingModels] = useState<Record<string, boolean>>({})
+
+    // Quote import states
+    const [file, setFile] = useState<File | null>(null)
+    const [importResult, setImportResult] = useState<ImportResult | null>(null)
+
+    const importMutation = useMutation({
+        mutationFn: (payload: File) => searchService.importQuotation(payload),
+        onSuccess: (data) => setImportResult(data),
+    })
 
     // Load initial data
     useEffect(() => {
@@ -276,12 +289,23 @@ export function AIPage() {
         return configs.find(c => c.provider === providerId)
     }
 
+    const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+        const selectedFile = e.target.files?.[0]
+        setFile(selectedFile || null)
+        setImportResult(null)
+    }
+
+    const handleImport = () => {
+        if (!file) return
+        importMutation.mutate(file)
+    }
+
     if (loading) {
         return <div className="flex items-center justify-center h-64">Đang tải...</div>
     }
 
     return (
-        <div className="space-y-8">
+        <div className="space-y-6">
             {/* Header */}
             <div>
                 <h1 className="mb-2 flex items-center gap-3 text-3xl font-bold">
@@ -294,144 +318,227 @@ export function AIPage() {
                     </span>
                     AI
                 </h1>
-                <p className="text-muted-foreground">Quản lý API keys và mô hình AI</p>
+                <p className="text-muted-foreground">Nhập báo giá và quản lý cấu hình AI</p>
             </div>
 
-            {/* Master Password Section */}
-            {!masterPasswordSet && (
-                <Card className="border-2 border-yellow-200 bg-yellow-50/50">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <Shield className="h-5 w-5 text-yellow-600" />
-                            Thiết Lập Mật Khẩu Chủ
-                        </CardTitle>
-                        <CardDescription>
-                            Bạn cần thiết lập mật khẩu chủ để bảo vệ các API keys
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <Button onClick={() => setShowMasterPasswordDialog(true)}>
-                            <Lock className="mr-2 h-4 w-4" />
-                            Thiết Lập Mật Khẩu
-                        </Button>
-                    </CardContent>
-                </Card>
-            )}
+            {/* Tabs */}
+            <Tabs defaultValue="import" className="w-full">
+                <TabsList className="grid w-full max-w-md grid-cols-2">
+                    <TabsTrigger value="import">Nhập Báo Giá</TabsTrigger>
+                    <TabsTrigger value="settings">Cấu Hình AI</TabsTrigger>
+                </TabsList>
 
-            {/* AI Providers Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {AI_PROVIDERS.map(provider => {
-                    const config = getConfigForProvider(provider.id)
-                    const models = availableModels[provider.id] || []
-                    const isLoadingModels = loadingModels[provider.id] || false
+                {/* Quote Import Tab */}
+                <TabsContent value="import" className="space-y-4 mt-6">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Hướng dẫn</CardTitle>
+                            <p className="text-sm text-muted-foreground">
+                                1. Chọn file báo giá (ảnh, PDF, Excel, CSV) • 2. Hệ thống tự động đọc và phân tích • 3. Sản phẩm
+                                mới được thêm, giá cũ được cập nhật • 4. Xem kết quả chi tiết
+                            </p>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <div className="flex flex-col gap-3 md:flex-row md:items-center">
+                                <Input type="file" accept=".jpg,.jpeg,.png,.pdf,.xlsx,.xls,.csv" onChange={handleFileChange} />
+                                <Button
+                                    onClick={handleImport}
+                                    disabled={!file || importMutation.isPending}
+                                    className="w-full md:w-auto"
+                                >
+                                    {importMutation.isPending ? (
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    ) : (
+                                        <UploadCloud className="mr-2 h-4 w-4" />
+                                    )}
+                                    Bắt đầu nhập
+                                </Button>
+                            </div>
+                            {file && (
+                                <p className="text-sm text-muted-foreground">
+                                    Đã chọn: <span className="font-medium text-foreground">{file.name}</span>
+                                </p>
+                            )}
 
-                    return (
-                        <Card key={provider.id} className={`${provider.color} border-2`}>
+                            {importMutation.isError && (
+                                <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+                                    Không thể nhập file, vui lòng thử lại.
+                                </div>
+                            )}
+
+                            {importResult && (
+                                <div className="mt-4 grid gap-4 md:grid-cols-3">
+                                    <div className="rounded-lg border bg-card p-4">
+                                        <p className="text-sm text-muted-foreground">✅ Cập nhật</p>
+                                        <p className="text-2xl font-bold">{importResult.updated}</p>
+                                    </div>
+                                    <div className="rounded-lg border bg-card p-4">
+                                        <p className="text-sm text-muted-foreground">➕ Thêm mới</p>
+                                        <p className="text-2xl font-bold">{importResult.added}</p>
+                                    </div>
+                                    <div className="rounded-lg border bg-card p-4">
+                                        <p className="text-sm text-muted-foreground">⚠️ Lỗi</p>
+                                        <p className="text-2xl font-bold">{importResult.errors.length}</p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {importResult?.errors?.length ? (
+                                <div className="rounded-lg border bg-amber-50 p-4 text-amber-900">
+                                    <p className="mb-2 font-semibold">Một số lỗi xảy ra:</p>
+                                    <ul className="list-disc space-y-1 pl-4 text-sm">
+                                        {importResult.errors.slice(0, 5).map((error, idx) => (
+                                            <li key={idx}>{error}</li>
+                                        ))}
+                                        {importResult.errors.length > 5 && (
+                                            <li>... và {importResult.errors.length - 5} lỗi khác</li>
+                                        )}
+                                    </ul>
+                                </div>
+                            ) : null}
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+
+                {/* AI Settings Tab */}
+                <TabsContent value="settings" className="space-y-6 mt-6">
+                    {/* Master Password Section */}
+                    {!masterPasswordSet && (
+                        <Card className="border-2 border-yellow-200 bg-yellow-50/50">
                             <CardHeader>
-                                <CardTitle className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-2xl">{provider.icon}</span>
-                                        <span className="text-lg">{provider.name}</span>
-                                    </div>
-                                    {config && (
-                                        <Switch
-                                            checked={config.is_enabled}
-                                            onCheckedChange={(checked) => handleToggleProvider(provider.id, checked)}
-                                            disabled={!masterPasswordSet}
-                                        />
-                                    )}
+                                <CardTitle className="flex items-center gap-2">
+                                    <Shield className="h-5 w-5 text-yellow-600" />
+                                    Thiết Lập Mật Khẩu Chủ
                                 </CardTitle>
+                                <CardDescription>
+                                    Bạn cần thiết lập mật khẩu chủ để bảo vệ các API keys
+                                </CardDescription>
                             </CardHeader>
-                            <CardContent className="space-y-3">
-                                <div className="flex items-center gap-2 text-sm">
-                                    <Key className="h-4 w-4" />
-                                    <span className={config?.has_api_key ? 'text-green-600 font-medium' : 'text-gray-500'}>
-                                        {config?.has_api_key ? 'Đã cấu hình' : 'Chưa cấu hình'}
-                                    </span>
-                                </div>
-
-                                {/* Model Selection */}
-                                {config?.has_api_key && (
-                                    <div className="space-y-2">
-                                        <div className="flex items-center justify-between">
-                                            <Label className="text-sm">Mô hình</Label>
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                className="h-6 px-2"
-                                                onClick={() => handleLoadModels(provider.id)}
-                                                disabled={!masterPasswordSet || isLoadingModels}
-                                            >
-                                                <RefreshCw className={`h-3 w-3 ${isLoadingModels ? 'animate-spin' : ''}`} />
-                                            </Button>
-                                        </div>
-                                        <Select
-                                            value={config.selected_model || ''}
-                                            onValueChange={(value) => handleSelectModel(provider.id, value)}
-                                            disabled={!masterPasswordSet}
-                                        >
-                                            <SelectTrigger className="h-9">
-                                                <SelectValue placeholder="Chọn mô hình" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {isLoadingModels ? (
-                                                    <SelectItem value="loading" disabled>
-                                                        Đang tải...
-                                                    </SelectItem>
-                                                ) : models.length > 0 ? (
-                                                    models.map(model => (
-                                                        <SelectItem key={model.id} value={model.id}>
-                                                            <div className="flex flex-col">
-                                                                <span className="font-medium">{model.name}</span>
-                                                                {model.description && (
-                                                                    <span className="text-xs text-muted-foreground">
-                                                                        {model.description}
-                                                                    </span>
-                                                                )}
-                                                            </div>
-                                                        </SelectItem>
-                                                    ))
-                                                ) : (
-                                                    <SelectItem value="no-models" disabled>
-                                                        Nhấn biểu tượng làm mới để tải mô hình
-                                                    </SelectItem>
-                                                )}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                )}
-
-                                <div className="flex gap-2">
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        className="flex-1"
-                                        onClick={() => {
-                                            setSelectedProvider(provider.id)
-                                            setShowApiKeyDialog(true)
-                                        }}
-                                        disabled={!masterPasswordSet}
-                                    >
-                                        <Save className="mr-2 h-3 w-3" />
-                                        {config?.has_api_key ? 'Cập nhật' : 'Thêm API Key'}
-                                    </Button>
-
-                                    {config && (
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => handleDeleteConfig(provider.id)}
-                                            disabled={!masterPasswordSet}
-                                        >
-                                            <Trash2 className="h-3 w-3" />
-                                        </Button>
-                                    )}
-                                </div>
+                            <CardContent>
+                                <Button onClick={() => setShowMasterPasswordDialog(true)}>
+                                    <Lock className="mr-2 h-4 w-4" />
+                                    Thiết Lập Mật Khẩu
+                                </Button>
                             </CardContent>
                         </Card>
-                    )
-                })}
-            </div>
+                    )}
+
+                    {/* AI Providers Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {AI_PROVIDERS.map(provider => {
+                            const config = getConfigForProvider(provider.id)
+                            const models = availableModels[provider.id] || []
+                            const isLoadingModels = loadingModels[provider.id] || false
+
+                            return (
+                                <Card key={provider.id} className={`${provider.color} border-2`}>
+                                    <CardHeader>
+                                        <CardTitle className="flex items-center justify-between">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-2xl">{provider.icon}</span>
+                                                <span className="text-lg">{provider.name}</span>
+                                            </div>
+                                            {config && (
+                                                <Switch
+                                                    checked={config.is_enabled}
+                                                    onCheckedChange={(checked) => handleToggleProvider(provider.id, checked)}
+                                                    disabled={!masterPasswordSet}
+                                                />
+                                            )}
+                                        </CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="space-y-3">
+                                        <div className="flex items-center gap-2 text-sm">
+                                            <Key className="h-4 w-4" />
+                                            <span className={config?.has_api_key ? 'text-green-600 font-medium' : 'text-gray-500'}>
+                                                {config?.has_api_key ? 'Đã cấu hình' : 'Chưa cấu hình'}
+                                            </span>
+                                        </div>
+
+                                        {/* Model Selection */}
+                                        {config?.has_api_key && (
+                                            <div className="space-y-2">
+                                                <div className="flex items-center justify-between">
+                                                    <Label className="text-sm">Mô hình</Label>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className="h-6 px-2"
+                                                        onClick={() => handleLoadModels(provider.id)}
+                                                        disabled={!masterPasswordSet || isLoadingModels}
+                                                    >
+                                                        <RefreshCw className={`h-3 w-3 ${isLoadingModels ? 'animate-spin' : ''}`} />
+                                                    </Button>
+                                                </div>
+                                                <Select
+                                                    value={config.selected_model || ''}
+                                                    onValueChange={(value) => handleSelectModel(provider.id, value)}
+                                                    disabled={!masterPasswordSet}
+                                                >
+                                                    <SelectTrigger className="h-9">
+                                                        <SelectValue placeholder="Chọn mô hình" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {isLoadingModels ? (
+                                                            <SelectItem value="loading" disabled>
+                                                                Đang tải...
+                                                            </SelectItem>
+                                                        ) : models.length > 0 ? (
+                                                            models.map(model => (
+                                                                <SelectItem key={model.id} value={model.id}>
+                                                                    <div className="flex flex-col">
+                                                                        <span className="font-medium">{model.name}</span>
+                                                                        {model.description && (
+                                                                            <span className="text-xs text-muted-foreground">
+                                                                                {model.description}
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                </SelectItem>
+                                                            ))
+                                                        ) : (
+                                                            <SelectItem value="no-models" disabled>
+                                                                Nhấn biểu tượng làm mới để tải mô hình
+                                                            </SelectItem>
+                                                        )}
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                        )}
+
+                                        <div className="flex gap-2">
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="flex-1"
+                                                onClick={() => {
+                                                    setSelectedProvider(provider.id)
+                                                    setShowApiKeyDialog(true)
+                                                }}
+                                                disabled={!masterPasswordSet}
+                                            >
+                                                <Save className="mr-2 h-3 w-3" />
+                                                {config?.has_api_key ? 'Cập nhật' : 'Thêm API Key'}
+                                            </Button>
+
+                                            {config && (
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => handleDeleteConfig(provider.id)}
+                                                    disabled={!masterPasswordSet}
+                                                >
+                                                    <Trash2 className="h-3 w-3" />
+                                                </Button>
+                                            )}
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            )
+                        })}
+                    </div>
+                </TabsContent>
+            </Tabs>
 
             {/* Master Password Setup Dialog */}
             <Dialog open={showMasterPasswordDialog} onOpenChange={setShowMasterPasswordDialog}>

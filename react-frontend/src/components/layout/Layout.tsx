@@ -6,7 +6,6 @@ import { cn } from '@/lib/utils'
 import {
     Home,
     Package,
-    Upload,
     Search,
     FileText,
     Users,
@@ -40,7 +39,6 @@ const menuItems: MenuItem[] = [
         path: '/products',
         customIcon: '/Image_iasozuiasozuiaso.png'
     },
-    { icon: Upload, label: 'Nhập báo giá', path: '/import', customIcon: '/Image_8htcuh8htcuh8htc.png' },
     { icon: Search, label: 'AI', path: '/ai', customIcon: '/Image_tzcpqytzcpqytzcp.png' },
     { icon: FileText, label: 'Hóa đơn', path: '/invoices', customIcon: '/Image_3rudgh3rudgh3rud.png' },
     { icon: Users, label: 'Khách hàng', path: '/customers', customIcon: '/Image_d6ma5pd6ma5pd6ma.png' },
