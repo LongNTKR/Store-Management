@@ -44,9 +44,21 @@ class Product(Base):
     is_active = Column(Boolean, default=True)
     deleted_at = Column(DateTime, nullable=True, index=True)  # NULL = active, timestamp = deleted
 
+    # Update tracking timestamps (for showing "recently updated" badges)
+    price_updated_at = Column(DateTime, nullable=True, index=True)  # Last sale price update
+    import_price_updated_at = Column(DateTime, nullable=True, index=True)  # Last import price update
+    info_updated_at = Column(DateTime, nullable=True, index=True)  # Last info update (name, category, desc, unit)
+
     # Relationships
     invoice_items = relationship('InvoiceItem', back_populates='product')
-    price_history = relationship('PriceHistory', back_populates='product', order_by='PriceHistory.changed_at.desc()')
+    # Price history is read-only from Product side to prevent SQLAlchemy from trying to manage it
+    # Price history should only be created/modified through ProductService methods
+    price_history = relationship(
+        'PriceHistory', 
+        back_populates='product', 
+        order_by='PriceHistory.changed_at.desc()',
+        viewonly=True  # Prevents SQLAlchemy from trying to update/delete price_history
+    )
 
     def __repr__(self):
         return f"<Product(id={self.id}, name='{self.name}', price={self.price}, import_price={self.import_price})>"

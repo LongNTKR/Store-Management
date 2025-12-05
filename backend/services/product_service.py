@@ -562,6 +562,8 @@ class ProductService:
         Returns:
             Updated Product object or None
         """
+        from database.models import get_vn_time
+        
         product = self.get_product(product_id)
         if not product:
             return None
@@ -570,23 +572,37 @@ class ProductService:
         if price is not None and price != product.price:
             self._record_price_change(product, price, reason=price_change_reason)
             product.price = price
-
-        if name is not None:
+            product.price_updated_at = get_vn_time()  # Track timestamp
+        
+        # Track import_price change
+        if import_price is not None and import_price != product.import_price:
+            product.import_price = import_price
+            product.import_price_updated_at = get_vn_time()  # Track timestamp
+        
+        # Track info updates (name, category, description, unit)
+        info_changed = False
+        
+        if name is not None and name != product.name:
             product.name = name
             product.normalized_name = normalize_vietnamese(name)
+            info_changed = True
 
-        if import_price is not None:
-            product.import_price = import_price
-
-        if description is not None:
-            product.description = description
-
-        if category is not None:
+        if category is not None and category != product.category:
             product.category = category
+            info_changed = True
 
-        if unit is not None:
+        if description is not None and description != product.description:
+            product.description = description
+            info_changed = True
+
+        if unit is not None and unit != product.unit:
             product.unit = unit
+            info_changed = True
+        
+        if info_changed:
+            product.info_updated_at = get_vn_time()  # Track timestamp
 
+        # Non-tracked updates (don't affect badges)
         if stock_quantity is not None:
             product.stock_quantity = stock_quantity
 
@@ -920,11 +936,8 @@ class ProductService:
 
                         if existing_product.price != price:
                             update_kwargs['price'] = price
-                            self._record_price_change(
-                                existing_product,
-                                price,
-                                reason="Price update from supplier list"
-                            )
+                            # Don't call _record_price_change here - update_product will handle it
+                            update_kwargs['price_change_reason'] = "Price update from supplier list"
 
                         if import_price_value is not None and existing_product.import_price != import_price_value:
                             update_kwargs['import_price'] = import_price_value

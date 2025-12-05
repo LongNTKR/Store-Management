@@ -11,7 +11,7 @@ import { ProductDetailsDialog } from '@/components/products/ProductDetailsDialog
 import { SearchHighlight } from '@/components/shared/SearchHighlight'
 import { formatCurrency, getProductImageUrl, cn } from '@/lib/utils'
 import type { Product } from '@/types'
-import { Pencil, Trash2, Search, ImageOff, Circle, CheckCircle2, Sparkles } from 'lucide-react'
+import { Pencil, Trash2, Search, ImageOff, Circle, CheckCircle2, Sparkles, TrendingUp, DollarSign, Edit } from 'lucide-react'
 import { toast } from 'sonner'
 
 export function ProductsPage() {
@@ -315,17 +315,71 @@ export function ProductsPage() {
                                     )}
                                     onClick={() => handleCardClick(product)}
                                 >
-                                    <div className="h-40 w-full overflow-hidden rounded-t-lg border-b bg-muted">
+                                    <div className="h-40 w-full overflow-hidden rounded-t-lg border-b bg-muted relative">
                                         {coverImage ? (
-                                            <img
-                                                src={getProductImageUrl(coverImage)}
-                                                alt={product.name}
-                                                className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                                            />
+                                            <>
+                                                <img
+                                                    src={getProductImageUrl(coverImage)}
+                                                    alt={product.name}
+                                                    className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                                                />
+                                                <div className="absolute top-2 right-2 flex flex-col gap-1 items-end">
+                                                    {product.is_new && (
+                                                        <div className="flex items-center gap-1 rounded-full bg-gradient-to-r from-red-500 to-orange-500 px-2 py-0.5 text-xs font-bold text-white shadow-lg ring-1 ring-white/30 animate-pulse">
+                                                            <Sparkles className="h-3 w-3" />
+                                                            <span>MỚI</span>
+                                                        </div>
+                                                    )}
+                                                    {product.recently_updated_price && (
+                                                        <div className="flex items-center gap-1 rounded-full bg-gradient-to-r from-green-500 to-emerald-500 px-2 py-0.5 text-xs font-bold text-white shadow-lg ring-1 ring-white/30">
+                                                            <TrendingUp className="h-3 w-3" />
+                                                            <span>Giá bán</span>
+                                                        </div>
+                                                    )}
+                                                    {product.recently_updated_import_price && (
+                                                        <div className="flex items-center gap-1 rounded-full bg-gradient-to-r from-blue-500 to-cyan-500 px-2 py-0.5 text-xs font-bold text-white shadow-lg ring-1 ring-white/30">
+                                                            <DollarSign className="h-3 w-3" />
+                                                            <span>Giá nhập</span>
+                                                        </div>
+                                                    )}
+                                                    {product.recently_updated_info && (
+                                                        <div className="flex items-center gap-1 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 px-2 py-0.5 text-xs font-bold text-white shadow-lg ring-1 ring-white/30">
+                                                            <Edit className="h-3 w-3" />
+                                                            <span>Thông tin</span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </>
                                         ) : (
-                                            <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-gradient-to-b from-slate-50 to-slate-100 text-muted-foreground">
+                                            <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-gradient-to-b from-slate-50 to-slate-100 text-muted-foreground relative">
                                                 <ImageOff className="h-6 w-6" />
                                                 <span className="text-sm font-medium">Chưa có ảnh</span>
+                                                <div className="absolute top-2 right-2 flex flex-col gap-1 items-end">
+                                                    {product.is_new && (
+                                                        <div className="flex items-center gap-1 rounded-full bg-gradient-to-r from-red-500 to-orange-500 px-2 py-0.5 text-xs font-bold text-white shadow-lg ring-1 ring-white/30 animate-pulse">
+                                                            <Sparkles className="h-3 w-3" />
+                                                            <span>MỚI</span>
+                                                        </div>
+                                                    )}
+                                                    {product.recently_updated_price && (
+                                                        <div className="flex items-center gap-1 rounded-full bg-gradient-to-r from-green-500 to-emerald-500 px-2 py-0.5 text-xs font-bold text-white shadow-lg ring-1 ring-white/30">
+                                                            <TrendingUp className="h-3 w-3" />
+                                                            <span>Giá bán</span>
+                                                        </div>
+                                                    )}
+                                                    {product.recently_updated_import_price && (
+                                                        <div className="flex items-center gap-1 rounded-full bg-gradient-to-r from-blue-500 to-cyan-500 px-2 py-0.5 text-xs font-bold text-white shadow-lg ring-1 ring-white/30">
+                                                            <DollarSign className="h-3 w-3" />
+                                                            <span>Giá nhập</span>
+                                                        </div>
+                                                    )}
+                                                    {product.recently_updated_info && (
+                                                        <div className="flex items-center gap-1 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 px-2 py-0.5 text-xs font-bold text-white shadow-lg ring-1 ring-white/30">
+                                                            <Edit className="h-3 w-3" />
+                                                            <span>Thông tin</span>
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </div>
                                         )}
                                     </div>

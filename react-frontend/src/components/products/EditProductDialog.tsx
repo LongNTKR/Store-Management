@@ -141,14 +141,52 @@ export function EditProductDialog({ product, open, onOpenChange }: EditProductDi
                 setIsImageUploading(true)
             }
 
-            await updateProduct.mutateAsync({
-                id: product.id,
-                product: {
-                    ...data,
-                    price: (data.price && !isNaN(data.price)) ? data.price : undefined,
-                    import_price: (data.import_price && !isNaN(data.import_price)) ? data.import_price : undefined,
-                },
-            })
+            // Only send fields that have actually changed
+            const changes: Partial<ProductFormData> = {}
+
+            // Check each field individually
+            if (data.name !== product.name) {
+                changes.name = data.name
+            }
+
+            // Handle price - only include if changed
+            const newPrice = (data.price && !isNaN(data.price)) ? data.price : undefined
+            if (newPrice !== product.price) {
+                changes.price = newPrice
+            }
+
+            // Handle import_price - only include if changed
+            const newImportPrice = (data.import_price && !isNaN(data.import_price)) ? data.import_price : undefined
+            if (newImportPrice !== product.import_price) {
+                changes.import_price = newImportPrice
+            }
+
+            // Handle category - treat empty string as null for comparison
+            const newCategory = data.category?.trim() || undefined
+            const oldCategory = product.category || undefined
+            if (newCategory !== oldCategory) {
+                changes.category = newCategory
+            }
+
+            // Handle unit - only if changed
+            if (data.unit !== product.unit) {
+                changes.unit = data.unit
+            }
+
+            // Handle description - treat empty string as null for comparison
+            const newDescription = data.description?.trim() || undefined
+            const oldDescription = product.description || undefined
+            if (newDescription !== oldDescription) {
+                changes.description = newDescription
+            }
+
+            // Only call update if there are actual changes
+            if (Object.keys(changes).length > 0) {
+                await updateProduct.mutateAsync({
+                    id: product.id,
+                    product: changes,
+                })
+            }
 
             if (newImages.length > 0) {
                 await productService.uploadImages(product.id, newImages)

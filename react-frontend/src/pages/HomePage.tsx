@@ -120,7 +120,7 @@ export function HomePage() {
                 <Button variant="outline" className="justify-start gap-2" onClick={() => navigate('/products')}>
                     <PlusCircle className="h-4 w-4" /> Thêm sản phẩm
                 </Button>
-                <Button variant="outline" className="justify-start gap-2" onClick={() => navigate('/import')}>
+                <Button variant="outline" className="justify-start gap-2" onClick={() => navigate('/ai')}>
                     <Upload className="h-4 w-4" /> Nhập báo giá
                 </Button>
                 <Button variant="outline" className="justify-start gap-2" onClick={() => setShowCreateInvoiceDialog(true)}>

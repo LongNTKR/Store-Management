@@ -13,6 +13,10 @@ export interface Product {
     is_active: boolean
     deleted_at?: string | null
     images?: string[]
+    is_new: boolean
+    recently_updated_price: boolean
+    recently_updated_import_price: boolean
+    recently_updated_info: boolean
 }
 
 export interface PaginatedResponse<T> {
