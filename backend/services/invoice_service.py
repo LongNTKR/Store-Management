@@ -11,6 +11,7 @@ from rapidfuzz import fuzz
 from database.models import Invoice, InvoiceItem, Product, Customer
 from utils.text_utils import normalize_vietnamese, normalize_phone
 from config import Config
+from pathlib import Path
 
 # UTC+7 timezone for Vietnam
 VN_TZ = pytz.timezone('Asia/Ho_Chi_Minh')
@@ -164,27 +165,74 @@ from reportlab.pdfbase.ttfonts import TTFont
 import openpyxl
 from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
 
-# Register fonts for Vietnamese support
-try:
-    pdfmetrics.registerFont(TTFont('DejaVuSans', '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'))
-    pdfmetrics.registerFont(TTFont('DejaVuSans-Bold', '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'))
-    
-    # Register font family to support <b> and <i> tags automatically
-    from reportlab.pdfbase import pdfmetrics
-    pdfmetrics.registerFontFamily(
-        'DejaVuSans',
-        normal='DejaVuSans',
-        bold='DejaVuSans-Bold',
-        italic='DejaVuSans',  # Fallback
-        boldItalic='DejaVuSans-Bold' # Fallback
-    )
+# Register fonts for Vietnamese support.
+# On Windows the Linux font path does not exist, so we keep the files inside the repo and also try Windows system fonts.
+FONT_DIR = Path(__file__).resolve().parent / "fonts"
+DEJAVU_REGULAR_URL = "https://dejavu-fonts.github.io/dejavu-fonts/ttf/DejaVuSans.ttf"
+DEJAVU_BOLD_URL = "https://dejavu-fonts.github.io/dejavu-fonts/ttf/DejaVuSans-Bold.ttf"
 
-    FONT_NORMAL = 'DejaVuSans'
-    FONT_BOLD = 'DejaVuSans-Bold'
-except Exception as e:
-    print(f"Warning: Could not load DejaVuSans fonts: {e}. Fallback to Helvetica.")
-    FONT_NORMAL = 'Helvetica'
-    FONT_BOLD = 'Helvetica-Bold'
+
+def _ensure_font(path: Path, url: str):
+    """Download a font if it is missing so Vietnamese text renders correctly."""
+    if path.exists():
+        return
+    try:
+        FONT_DIR.mkdir(parents=True, exist_ok=True)
+        import requests
+        response = requests.get(url, timeout=15)
+        response.raise_for_status()
+        path.write_bytes(response.content)
+    except Exception as e:
+        print(f"Warning: Could not download font {path.name}: {e}")
+
+
+def _is_valid_ttf(path: Path) -> bool:
+    """Quick check to avoid HTML/error files when download fails."""
+    try:
+        if not path.exists() or path.stat().st_size < 1024:
+            return False
+        with path.open("rb") as f:
+            header = f.read(4)
+            return header in {b"\x00\x01\x00\x00", b"OTTO"}
+    except Exception:
+        return False
+
+
+regular_font_path = FONT_DIR / "DejaVuSans.ttf"
+bold_font_path = FONT_DIR / "DejaVuSans-Bold.ttf"
+_ensure_font(regular_font_path, DEJAVU_REGULAR_URL)
+_ensure_font(bold_font_path, DEJAVU_BOLD_URL)
+
+# Windows system fonts as backup (have Vietnamese glyphs)
+windows_regular = Path("C:/Windows/Fonts/arial.ttf")
+windows_bold = Path("C:/Windows/Fonts/arialbd.ttf")
+
+# Try repo fonts first, then Windows fonts, otherwise fall back to Helvetica
+FONT_NORMAL = 'Helvetica'
+FONT_BOLD = 'Helvetica-Bold'
+font_candidates = [
+    ("DejaVuSans", regular_font_path, bold_font_path),
+    ("Arial", windows_regular, windows_bold),
+]
+
+for font_name, normal_path, bold_path in font_candidates:
+    if not (_is_valid_ttf(normal_path) and _is_valid_ttf(bold_path)):
+        continue
+    try:
+        pdfmetrics.registerFont(TTFont(font_name, str(normal_path)))
+        pdfmetrics.registerFont(TTFont(f"{font_name}-Bold", str(bold_path)))
+        pdfmetrics.registerFontFamily(
+            font_name,
+            normal=font_name,
+            bold=f"{font_name}-Bold",
+            italic=font_name,  # Fallback
+            boldItalic=f"{font_name}-Bold"  # Fallback
+        )
+        FONT_NORMAL = font_name
+        FONT_BOLD = f"{font_name}-Bold"
+        break
+    except Exception as e:
+        print(f"Warning: Could not load {font_name} fonts from {normal_path}: {e}")
 
 
 class InvoiceService:
@@ -940,8 +988,9 @@ class InvoiceService:
         def draw_watermark(canvas, doc):
             """Draw watermark on PDF page."""
             canvas.saveState()
-            logo_path = "/home/longnt/Documents/Store-Management/react-frontend/public/Image_bqzqd5bqzqd5bqzq.png"
-            if os.path.exists(logo_path):
+            project_root = Path(__file__).resolve().parents[2]
+            logo_path = project_root / "react-frontend" / "public" / "Image_bqzqd5bqzqd5bqzq.png"
+            if logo_path.exists():
                 # Center of A4 page
                 page_width, page_height = A4
                 image_width = 100 * mm
@@ -950,7 +999,7 @@ class InvoiceService:
                 y = (page_height - image_height) / 2
                 
                 canvas.setFillAlpha(0.1) # Transparency
-                canvas.drawImage(logo_path, x, y, width=image_width, height=image_height, mask='auto', preserveAspectRatio=True)
+                canvas.drawImage(str(logo_path), x, y, width=image_width, height=image_height, mask='auto', preserveAspectRatio=True)
                 
             canvas.restoreState()
 
