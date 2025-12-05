@@ -1,5 +1,4 @@
-import { useState, useEffect, type ChangeEvent } from 'react'
-import { useMutation } from '@tanstack/react-query'
+import { useState, useEffect, useRef, type ChangeEvent } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -11,8 +10,10 @@ import { useToast } from '@/hooks/use-toast'
 import { Key, Lock, Eye, EyeOff, Trash2, Save, Shield, RefreshCw, Loader2, UploadCloud } from 'lucide-react'
 import { aiConfigService, type AIModelInfo } from '@/services/aiConfig'
 import type { AIConfig } from '@/services/aiConfig'
-import { searchService } from '@/services/search'
 import type { ImportResult } from '@/types'
+import * as importService from '@/services/import'
+import type { PreviewResponse } from '@/types/import'
+import { PriceListPreviewDialog } from '@/components/products/PriceListPreviewDialog'
 import {
     Select,
     SelectContent,
@@ -56,26 +57,60 @@ export function AIPage() {
     const [loadingModels, setLoadingModels] = useState<Record<string, boolean>>({})
 
     // Quote import states
-    const [file, setFile] = useState<File | null>(null)
     const [importResult, setImportResult] = useState<ImportResult | null>(null)
+
+    // AI Import states
+    const [networkConnected, setNetworkConnected] = useState<boolean | null>(null)
+    const [checkingNetwork, setCheckingNetwork] = useState(false)
+    const [aiImportFile, setAiImportFile] = useState<File | null>(null)
+    const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+    const [analyzingImage, setAnalyzingImage] = useState(false)
+    const [previewData, setPreviewData] = useState<PreviewResponse | null>(null)
+    const [showPreviewDialog, setShowPreviewDialog] = useState(false)
+    const [confirmingImport, setConfirmingImport] = useState(false)
 
     // Tab state
     const [activeTab, setActiveTab] = useState(() => localStorage.getItem('aiPageActiveTab') || 'import')
+
+    // Ref for file input to allow programmatic reset
+    const fileInputRef = useRef<HTMLInputElement>(null)
 
     // Update localStorage when tab changes
     useEffect(() => {
         localStorage.setItem('aiPageActiveTab', activeTab)
     }, [activeTab])
 
-    const importMutation = useMutation({
-        mutationFn: (payload: File) => searchService.importQuotation(payload),
-        onSuccess: (data) => setImportResult(data),
-    })
-
     // Load initial data
     useEffect(() => {
         loadData()
     }, [])
+
+    // Random connection check
+    useEffect(() => {
+        if (activeTab !== 'import') return
+
+        let timeoutId: ReturnType<typeof setTimeout>
+
+        const runBackgroundCheck = async () => {
+            try {
+                const result = await importService.checkConnection()
+                setNetworkConnected(result.connected)
+            } catch (error) {
+                setNetworkConnected(false)
+            }
+            scheduleNextCheck()
+        }
+
+        const scheduleNextCheck = () => {
+            const randomDelay = Math.floor(Math.random() * (120000)) + 60000 // 1-3 minutes
+            timeoutId = setTimeout(runBackgroundCheck, randomDelay)
+        }
+
+        // Run immediately on load
+        runBackgroundCheck()
+
+        return () => clearTimeout(timeoutId)
+    }, [activeTab])
 
     const loadData = async () => {
         try {
@@ -302,15 +337,121 @@ export function AIPage() {
         return configs.find(c => c.provider === providerId)
     }
 
-    const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
-        const selectedFile = e.target.files?.[0]
-        setFile(selectedFile || null)
-        setImportResult(null)
+
+
+    // AI Import handlers
+    const handleCheckNetwork = async () => {
+        setCheckingNetwork(true)
+        try {
+            const result = await importService.checkConnection()
+            setNetworkConnected(result.connected)
+        } catch (error) {
+            setNetworkConnected(false)
+        } finally {
+            setCheckingNetwork(false)
+        }
     }
 
-    const handleImport = () => {
-        if (!file) return
-        importMutation.mutate(file)
+    const getAvailableProviders = () => {
+        // Check which providers have API keys
+        return configs.filter(c => c.has_api_key && c.is_enabled)
+    }
+
+    const handleAiImportFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+        const selectedFile = e.target.files?.[0]
+        setAiImportFile(selectedFile || null)
+        setPreviewData(null)
+        setImportResult(null)
+
+        // Create preview URL
+        if (selectedFile) {
+            const url = URL.createObjectURL(selectedFile)
+            setPreviewUrl(url)
+        } else {
+            setPreviewUrl(null)
+        }
+    }
+
+    const handleClearImage = () => {
+        setAiImportFile(null)
+        setPreviewUrl(null)
+        setPreviewData(null)
+        setImportResult(null)
+        // Reset the file input
+        if (fileInputRef.current) {
+            fileInputRef.current.value = ''
+        }
+    }
+
+    // Cleanup preview URL on unmount or when file changes
+    useEffect(() => {
+        return () => {
+            if (previewUrl) {
+                URL.revokeObjectURL(previewUrl)
+            }
+        }
+    }, [previewUrl])
+
+    const handleAnalyzeImage = async () => {
+        if (!aiImportFile) return
+
+        const availableProviders = getAvailableProviders()
+        if (availableProviders.length === 0) {
+            toast({
+                variant: 'destructive',
+                title: 'Lỗi',
+                description: 'Vui lòng cấu hình ít nhất một AI provider trong tab Cấu hình AI'
+            })
+            return
+        }
+
+        setAnalyzingImage(true)
+        try {
+            const preview = await importService.previewAIImport(aiImportFile)
+            setPreviewData(preview)
+            setShowPreviewDialog(true)
+            toast({
+                title: 'Phân tích thành công',
+                description: `Tìm thấy ${preview.summary.total} sản phẩm (Provider: ${preview.provider_used})`
+            })
+        } catch (error: any) {
+            toast({
+                variant: 'destructive',
+                title: 'Lỗi phân tích ảnh',
+                description: error.response?.data?.detail || 'Không thể phân tích ảnh. Vui lòng thử lại.'
+            })
+        } finally {
+            setAnalyzingImage(false)
+        }
+    }
+
+    const handleConfirmImport = async (items: any[]) => {
+        setConfirmingImport(true)
+        try {
+            const result = await importService.confirmImport({
+                items
+            })
+
+            setImportResult(result)
+            setShowPreviewDialog(false)
+
+            toast({
+                title: 'Nhập thành công',
+                description: `Đã nhập ${result.added + result.updated} sản phẩm (${result.added} mới, ${result.updated} cập nhật)`
+            })
+
+            // Clear file and preview
+            setAiImportFile(null)
+            setPreviewData(null)
+        } catch (error: any) {
+            toast({
+                variant: 'destructive',
+                title: 'Lỗi nhập sản phẩm',
+                description: error.response?.data?.detail || 'Không thể nhập sản phẩm. Vui lòng thử lại.'
+            })
+        } finally {
+            setConfirmingImport(false)
+        }
     }
 
     if (loading) {
@@ -341,46 +482,136 @@ export function AIPage() {
                     <TabsTrigger value="settings">Cấu Hình AI</TabsTrigger>
                 </TabsList>
 
-                {/* Quote Import Tab */}
+                {/* AI Import Tab */}
                 <TabsContent value="import" className="space-y-4 mt-6">
+
+
+                    {/* AI Provider Status - Hidden as per request */}
+                    {/* <Card>
+                        <CardHeader>
+                            <CardTitle>Trạng Thái AI Providers</CardTitle>
+                            <CardDescription>
+                                Ưu tiên: OpenAI → xAI (Grok) → Google Gemini
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="space-y-2">
+                                {['openai', 'grok', 'google'].map(providerId => {
+                                    const provider = AI_PROVIDERS.find(p => p.id === providerId)
+                                    const config = getConfigForProvider(providerId)
+                                    const hasKey = config?.has_api_key && config?.is_enabled
+                                    return (
+                                        <div key={providerId} className="flex items-center justify-between p-3 border rounded-lg">
+                                            <div className="flex items-center gap-3">
+                                                <span className="text-2xl">{provider?.icon}</span>
+                                                <div>
+                                                    <div className="font-medium">{provider?.name}</div>
+                                                    <div className="text-xs text-gray-500">
+                                                        {config?.selected_model || 'Chưa cấu hình'}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div className={`px-3 py-1 rounded-full text-xs font-medium ${hasKey ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
+                                                {hasKey ? '✓ Sẵn sàng' : '✗ Chưa cấu hình'}
+                                            </div>
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                            {getAvailableProviders().length === 0 && (
+                                <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
+                                    ⚠️ Chưa có provider nào được cấu hình. Vui lòng cấu hình ít nhất một provider trong tab "Cấu Hình AI".
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card> */}
+
+                    {/* AI Import Card */}
                     <Card>
                         <CardHeader>
-                            <CardTitle>Hướng dẫn</CardTitle>
-                            <p className="text-sm text-muted-foreground">
-                                1. Chọn file báo giá (ảnh, PDF, Excel, CSV) • 2. Hệ thống tự động đọc và phân tích • 3. Sản phẩm
-                                mới được thêm, giá cũ được cập nhật • 4. Xem kết quả chi tiết
-                            </p>
+                            <div className="flex items-center justify-between">
+                                <CardTitle>Nhập Báo Giá với AI</CardTitle>
+                                <div className="flex items-center gap-2">
+                                    <span className={`text-sm ${networkConnected ? 'text-green-600' : 'text-red-600'}`}>
+                                        {networkConnected ? 'Internet: Đã kết nối' : 'Internet: Mất kết nối'}
+                                    </span>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-6 w-6"
+                                        onClick={handleCheckNetwork}
+                                        disabled={checkingNetwork}
+                                        title="Kiểm tra kết nối"
+                                    >
+                                        <RefreshCw className={`h-3 w-3 ${checkingNetwork ? 'animate-spin' : ''}`} />
+                                    </Button>
+                                </div>
+                            </div>
+                            <CardDescription>
+                                1. Chụp ảnh danh sách sản phẩm • 2. AI phân tích và nhận diện • 3. Xem trước và chỉnh sửa • 4. Xác nhận nhập
+                            </CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
                             <div className="flex flex-col gap-3 md:flex-row md:items-center">
-                                <Input type="file" accept=".jpg,.jpeg,.png,.pdf,.xlsx,.xls,.csv" onChange={handleFileChange} />
+                                <div className="flex-1">
+                                    <Input
+                                        ref={fileInputRef}
+                                        type="file"
+                                        accept="image/*,.jpg,.jpeg,.png,.webp"
+                                        onChange={handleAiImportFileChange}
+                                        disabled={analyzingImage}
+                                        className="hidden"
+                                        id="ai-file-input"
+                                    />
+                                    <label
+                                        htmlFor="ai-file-input"
+                                        className="flex h-10 w-full cursor-pointer items-center justify-center rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                        Chọn file
+                                    </label>
+                                </div>
                                 <Button
-                                    onClick={handleImport}
-                                    disabled={!file || importMutation.isPending}
+                                    onClick={handleAnalyzeImage}
+                                    disabled={!aiImportFile || analyzingImage || getAvailableProviders().length === 0}
                                     className="w-full md:w-auto"
                                 >
-                                    {importMutation.isPending ? (
+                                    {analyzingImage ? (
                                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                                     ) : (
                                         <UploadCloud className="mr-2 h-4 w-4" />
                                     )}
-                                    Bắt đầu nhập
+                                    {analyzingImage ? 'AI đang phân tích...' : 'Phân tích ảnh'}
                                 </Button>
                             </div>
-                            {file && (
-                                <p className="text-sm text-muted-foreground">
-                                    Đã chọn: <span className="font-medium text-foreground">{file.name}</span>
-                                </p>
-                            )}
 
-                            {importMutation.isError && (
-                                <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
-                                    Không thể nhập file, vui lòng thử lại.
+                            {aiImportFile && previewUrl && (
+                                <div className="mt-4">
+                                    <div className="mb-2 flex items-center justify-between">
+                                        <p className="text-sm text-muted-foreground">
+                                            Đã chọn: <span className="font-medium text-foreground">{aiImportFile.name}</span>
+                                        </p>
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={handleClearImage}
+                                            className="h-8 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                        >
+                                            <Trash2 className="mr-1 h-4 w-4" />
+                                            Xóa ảnh
+                                        </Button>
+                                    </div>
+                                    <div className="relative aspect-video w-full max-w-md overflow-hidden rounded-lg border bg-muted">
+                                        <img
+                                            src={previewUrl}
+                                            alt="Preview"
+                                            className="h-full w-full object-contain"
+                                        />
+                                    </div>
                                 </div>
                             )}
 
                             {importResult && (
-                                <div className="mt-4 grid gap-4 md:grid-cols-3">
+                                <div className="mt-4 grid gap-4 md:grid-cols-4">
                                     <div className="rounded-lg border bg-card p-4">
                                         <p className="text-sm text-muted-foreground">✅ Cập nhật</p>
                                         <p className="text-2xl font-bold">{importResult.updated}</p>
@@ -390,13 +621,17 @@ export function AIPage() {
                                         <p className="text-2xl font-bold">{importResult.added}</p>
                                     </div>
                                     <div className="rounded-lg border bg-card p-4">
+                                        <p className="text-sm text-muted-foreground">⏭️ Bỏ qua</p>
+                                        <p className="text-2xl font-bold">{importResult.skipped}</p>
+                                    </div>
+                                    <div className="rounded-lg border bg-card p-4">
                                         <p className="text-sm text-muted-foreground">⚠️ Lỗi</p>
-                                        <p className="text-2xl font-bold">{importResult.errors.length}</p>
+                                        <p className="text-2xl font-bold">{importResult.errors?.length || 0}</p>
                                     </div>
                                 </div>
                             )}
 
-                            {importResult?.errors?.length ? (
+                            {importResult?.errors && importResult.errors.length > 0 && (
                                 <div className="rounded-lg border bg-amber-50 p-4 text-amber-900">
                                     <p className="mb-2 font-semibold">Một số lỗi xảy ra:</p>
                                     <ul className="list-disc space-y-1 pl-4 text-sm">
@@ -408,7 +643,7 @@ export function AIPage() {
                                         )}
                                     </ul>
                                 </div>
-                            ) : null}
+                            )}
                         </CardContent>
                     </Card>
                 </TabsContent>
@@ -681,6 +916,16 @@ export function AIPage() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            {/* Price List Preview Dialog */}
+            <PriceListPreviewDialog
+                open={showPreviewDialog}
+                onOpenChange={setShowPreviewDialog}
+                previewData={previewData}
+                masterPassword={verifyPassword}
+                onConfirm={handleConfirmImport}
+                isConfirming={confirmingImport}
+            />
         </div>
     )
 }

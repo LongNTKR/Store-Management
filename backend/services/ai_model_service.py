@@ -20,6 +20,7 @@ FALLBACK_MODELS = {
         {'id': 'claude-3-haiku-20240307', 'name': 'Claude 3 Haiku', 'description': 'Fast and compact model'},
     ],
     'grok': [
+        {'id': 'grok-2-vision-1212', 'name': 'Grok 2 Vision', 'description': 'Vision-capable model for image analysis'},
         {'id': 'grok-4-1-fast-reasoning', 'name': 'Grok 4.1 Fast Reasoning', 'description': 'Fast reasoning model'},
         {'id': 'grok-2-1212', 'name': 'Grok 2', 'description': 'Latest Grok model'},
         {'id': 'grok-2-mini', 'name': 'Grok 2 Mini', 'description': 'Compact version'},

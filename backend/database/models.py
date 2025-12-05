@@ -28,7 +28,7 @@ class Product(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(255), nullable=False, index=True)
     normalized_name = Column(String(255), nullable=True, index=True)  # Vietnamese unaccented name for search
-    price = Column(Float, nullable=False)
+    price = Column(Float, nullable=True)  # giá bán (có thể không nhập)
     import_price = Column(Float, nullable=True)  # giá nhập (có thể không nhập)
     description = Column(Text, nullable=True)
     category = Column(String(100), nullable=True, index=True)

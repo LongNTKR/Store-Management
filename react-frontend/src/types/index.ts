@@ -114,5 +114,6 @@ export interface CustomerStats {
 export interface ImportResult {
     updated: number
     added: number
+    skipped: number
     errors: string[]
 }

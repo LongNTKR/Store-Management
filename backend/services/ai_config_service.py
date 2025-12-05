@@ -209,6 +209,32 @@ class AIConfigService:
         
         # Decrypt and return
         return decrypt_api_key(config.api_key_encrypted)
+
+    @staticmethod
+    def get_decrypted_api_key_internal(db: Session, provider: str) -> str:
+        """Get decrypted API key for a provider (Internal use only).
+        
+        WARNING: This method does NOT verify the master password.
+        It should only be used for internal backend processes where
+        user authorization has already been established or is not required.
+        
+        Args:
+            db: Database session
+            provider: Provider name
+        
+        Returns:
+            Decrypted API key
+        
+        Raises:
+            ValueError: If provider not found
+        """
+        # Get config
+        config = AIConfigService.get_config_by_provider(db, provider)
+        if not config:
+            raise ValueError(f"No configuration found for provider: {provider}")
+        
+        # Decrypt and return
+        return decrypt_api_key(config.api_key_encrypted)
     
     @staticmethod
     def delete_config(db: Session, provider: str, master_password: str) -> bool:

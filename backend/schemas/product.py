@@ -5,7 +5,7 @@ from datetime import datetime
 
 class ProductBase(BaseModel):
     name: str
-    price: float
+    price: Optional[float] = None
     import_price: Optional[float] = None
     description: Optional[str] = None
     category: Optional[str] = None

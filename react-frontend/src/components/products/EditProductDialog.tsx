@@ -23,7 +23,11 @@ import { MAX_PRODUCT_IMAGES } from '@/constants/products'
 
 const productSchema = z.object({
     name: z.string().min(1, 'Vui lòng nhập tên sản phẩm'),
-    price: z.number().positive('Giá bán phải lớn hơn 0'),
+    price: z.union([
+        z.number().positive('Giá bán phải lớn hơn 0'),
+        z.nan(),
+        z.undefined()
+    ]).optional(),
     import_price: z.union([
         z.number().positive('Giá nhập phải lớn hơn 0'),
         z.nan(),
@@ -148,6 +152,7 @@ export function EditProductDialog({ product, open, onOpenChange }: EditProductDi
                 id: product.id,
                 product: {
                     ...data,
+                    price: (data.price && !isNaN(data.price)) ? data.price : undefined,
                     import_price: (data.import_price && !isNaN(data.import_price)) ? data.import_price : undefined,
                 },
             })
@@ -204,7 +209,7 @@ export function EditProductDialog({ product, open, onOpenChange }: EditProductDi
                         </div>
 
                         <div className="space-y-2">
-                            <Label htmlFor="price">Giá bán (VNĐ) *</Label>
+                            <Label htmlFor="price">Giá bán (VNĐ)</Label>
                             <Input
                                 id="price"
                                 type="number"

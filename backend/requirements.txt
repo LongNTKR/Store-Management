@@ -17,6 +17,10 @@ sqlalchemy==2.0.30
 # Google Vision API for OCR and Image Search
 google-cloud-vision==3.7.2
 
+# AI/LLM Providers for price list analysis
+openai>=1.0.0  # OpenAI GPT-4V
+google-generativeai>=0.8.0  # Google Gemini Vision
+
 # Image Processing
 opencv-python==4.9.0.80
 numpy==1.26.4
