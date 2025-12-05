@@ -86,20 +86,29 @@ export function AIPage() {
         loadData()
     }, [])
 
-    // Random connection check
+    // Random connection check - only runs when on import tab
     useEffect(() => {
         if (activeTab !== 'import') return
 
         let timeoutId: ReturnType<typeof setTimeout>
+        let isActive = true // Flag to prevent scheduling after cleanup
 
         const runBackgroundCheck = async () => {
             try {
                 const result = await importService.checkConnection()
-                setNetworkConnected(result.connected)
+                if (isActive) {
+                    setNetworkConnected(result.connected)
+                }
             } catch (error) {
-                setNetworkConnected(false)
+                if (isActive) {
+                    setNetworkConnected(false)
+                }
             }
-            scheduleNextCheck()
+
+            // Only schedule next check if still on import tab
+            if (isActive) {
+                scheduleNextCheck()
+            }
         }
 
         const scheduleNextCheck = () => {
@@ -110,7 +119,10 @@ export function AIPage() {
         // Run immediately on load
         runBackgroundCheck()
 
-        return () => clearTimeout(timeoutId)
+        return () => {
+            isActive = false // Prevent any pending async operations from updating state
+            clearTimeout(timeoutId)
+        }
     }, [activeTab])
 
     const loadData = async () => {
