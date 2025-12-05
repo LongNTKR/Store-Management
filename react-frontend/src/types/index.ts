@@ -1,7 +1,7 @@
 export interface Product {
     id: number
     name: string
-    price: number
+    price?: number  // Optional - only name is required
     import_price?: number
     description?: string
     category?: string

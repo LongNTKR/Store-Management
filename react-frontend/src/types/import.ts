@@ -25,7 +25,7 @@ export interface SuggestedMatch {
  */
 export interface DetectedProduct {
   name: string
-  price: number
+  price?: number | null  // Optional - only name is required
   import_price?: number | null
   unit?: string | null
   category?: string | null
@@ -37,7 +37,7 @@ export interface DetectedProduct {
 export interface PreviewItem {
   // Detected data
   detected_name: string
-  detected_price: number
+  detected_price: number | null  // Optional - products can have only import_price
   detected_import_price: number | null
   detected_unit: string | null
   detected_category: string | null
@@ -59,7 +59,7 @@ export interface PreviewItem {
   user_action?: ImportAction
   user_product_id?: number // If user selects a suggested match to update
   user_name?: string // If user edits the name
-  user_price?: number // If user edits the price
+  user_price?: number | null // If user edits the price
   user_import_price?: number | null // If user edits the import price
   user_unit?: string | null
   user_category?: string | null
@@ -94,7 +94,7 @@ export interface ConfirmImportItem {
 
   // Product data (user may have edited these)
   name: string
-  price: number
+  price?: number | null  // Optional - at least one price (price or import_price) should be provided
   import_price?: number | null
   unit?: string | null
   category?: string | null

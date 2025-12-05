@@ -235,7 +235,7 @@ export function ProductsPage() {
                                             <SearchHighlight text={product.name} query={searchQuery} />
                                         </div>
                                         <div className="text-xs text-muted-foreground">
-                                            {formatCurrency(product.price)}
+                                            {product.price ? formatCurrency(product.price) : 'Chưa có giá'}
                                             {product.category && ` • ${product.category}`}
                                         </div>
                                     </div>
@@ -386,7 +386,7 @@ export function ProductsPage() {
                                     <CardContent className="space-y-2">
                                         <div className="space-y-1">
                                             <p className="text-lg font-bold text-green-600">
-                                                💰 {formatCurrency(product.price)}
+                                                💰 {product.price ? formatCurrency(product.price) : 'Chưa có giá'}
                                             </p>
                                         </div>
                                         {product.category && (

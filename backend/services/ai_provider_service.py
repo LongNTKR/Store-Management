@@ -410,25 +410,41 @@ Mỗi sản phẩm cần có cấu trúc JSON như sau:
             products: List of product dicts
 
         Returns:
-            True if valid (at least 1 product with name and price), False otherwise
+            True if valid (at least 1 product with name), False otherwise
         """
         if not products or not isinstance(products, list):
             return False
 
         # Check if at least one product has required fields
+        # According to the schema, only 'name' is required
+        valid_count = 0
         for product in products:
             if isinstance(product, dict):
                 name = product.get('name', '').strip()
-                price = product.get('price')
+                
+                # Product is valid if it has a name
+                if name:
+                    valid_count += 1
+                    
+                    # Optional: Validate prices if they exist
+                    price = product.get('price')
+                    import_price = product.get('import_price')
+                    
+                    # If price/import_price is provided, validate it's numeric
+                    if price is not None:
+                        try:
+                            float(price)
+                        except (ValueError, TypeError):
+                            logger.warning(f"Product '{name}' has invalid price: {price}")
+                    
+                    if import_price is not None:
+                        try:
+                            float(import_price)
+                        except (ValueError, TypeError):
+                            logger.warning(f"Product '{name}' has invalid import_price: {import_price}")
 
-                if name and price is not None:
-                    try:
-                        float(price)
-                        return True
-                    except (ValueError, TypeError):
-                        continue
-
-        return False
+        logger.info(f"Validated {valid_count}/{len(products)} products")
+        return valid_count > 0
 
     def analyze_price_list_image(
         self,

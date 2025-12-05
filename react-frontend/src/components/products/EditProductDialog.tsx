@@ -23,22 +23,15 @@ import { MAX_PRODUCT_IMAGES } from '@/constants/products'
 
 const productSchema = z.object({
     name: z.string().min(1, 'Vui lòng nhập tên sản phẩm'),
-    price: z.union([
-        z.number().positive('Giá bán phải lớn hơn 0'),
-        z.nan(),
-        z.undefined()
-    ]).optional(),
-    import_price: z.union([
-        z.number().positive('Giá nhập phải lớn hơn 0'),
-        z.nan(),
-        z.undefined()
-    ]).optional(),
+    price: z.number().positive('Giá bán phải lớn hơn 0').optional(),
+    import_price: z.number().positive('Giá nhập phải lớn hơn 0').optional(),
     category: z.string().optional(),
     unit: z.string(),
     description: z.string().optional(),
 })
 
 type ProductFormData = z.infer<typeof productSchema>
+
 
 interface EditProductDialogProps {
     product: Product
@@ -200,8 +193,10 @@ export function EditProductDialog({ product, open, onOpenChange }: EditProductDi
                                 id="import_price"
                                 type="number"
                                 step="0.01"
-                                placeholder="0"
-                                {...register('import_price', { valueAsNumber: true })}
+                                placeholder="Để trống nếu chưa có giá"
+                                {...register('import_price', {
+                                    setValueAs: (v) => v === '' || v === null ? undefined : parseFloat(v)
+                                })}
                             />
                             {errors.import_price && (
                                 <p className="text-sm text-destructive">{errors.import_price.message}</p>
@@ -214,7 +209,10 @@ export function EditProductDialog({ product, open, onOpenChange }: EditProductDi
                                 id="price"
                                 type="number"
                                 step="0.01"
-                                {...register('price', { valueAsNumber: true })}
+                                placeholder="Để trống nếu chưa có giá"
+                                {...register('price', {
+                                    setValueAs: (v) => v === '' || v === null ? undefined : parseFloat(v)
+                                })}
                             />
                             {errors.price && (
                                 <p className="text-sm text-destructive">{errors.price.message}</p>

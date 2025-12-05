@@ -116,16 +116,20 @@ async def preview_ai_import(
 
         for detected in detected_products:
             detected_name = detected.get('name', '').strip()
+            
+            # Only name is required, prices are optional
+            if not detected_name:
+                continue
+
+            # Parse and validate detected_price (optional)
             detected_price = detected.get('price')
-
-            if not detected_name or detected_price is None:
-                continue
-
-            try:
-                detected_price = float(detected_price)
-            except (ValueError, TypeError):
-                continue
-
+            if detected_price is not None:
+                try:
+                    detected_price = float(detected_price)
+                except (ValueError, TypeError):
+                    detected_price = None
+            
+            # Parse and validate import_price (optional)
             detected_import_price = detected.get('import_price')
             if detected_import_price is not None:
                 try:
@@ -246,9 +250,6 @@ async def confirm_import(
     Confirm and execute import from preview data.
     User can modify detected data and choose action (create/update/skip) for each item.
     """
-    # Verify master password
-    if not AIConfigService.verify_master_password(db, request.master_password):
-        raise HTTPException(status_code=401, detail="Mật khẩu chính không đúng")
 
     product_service = ProductService(db, Config.IMAGE_DIR, Config.MAX_PRODUCT_IMAGES)
 

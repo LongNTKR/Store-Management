@@ -411,7 +411,7 @@ export function TrashPage() {
                                                     {' • '}
                                                 </>
                                             )}
-                                            Giá: {formatCurrency(product.price)}
+                                            Giá: {product.price ? formatCurrency(product.price) : 'Chưa có giá'}
                                         </p>
                                         <p className="text-xs text-muted-foreground mt-1">
                                             🗑️ Xóa {deletedDaysAgo} ngày trước
@@ -584,16 +584,16 @@ export function TrashPage() {
             )}
 
             {((activeTab === 'products' && (hasNextProducts || isFetchingNextProducts)) ||
-              (activeTab === 'customers' && (hasNextCustomers || isFetchingNextCustomers))) && (
-                <div
-                    ref={loadMoreRef}
-                    className="py-6 text-center text-sm text-muted-foreground"
-                >
-                    {(activeTab === 'products' ? isFetchingNextProducts : isFetchingNextCustomers)
-                        ? 'Đang tải thêm...'
-                        : `Kéo xuống để xem thêm ${activeTab === 'products' ? 'sản phẩm' : 'khách hàng'} đã xóa`}
-                </div>
-            )}
+                (activeTab === 'customers' && (hasNextCustomers || isFetchingNextCustomers))) && (
+                    <div
+                        ref={loadMoreRef}
+                        className="py-6 text-center text-sm text-muted-foreground"
+                    >
+                        {(activeTab === 'products' ? isFetchingNextProducts : isFetchingNextCustomers)
+                            ? 'Đang tải thêm...'
+                            : `Kéo xuống để xem thêm ${activeTab === 'products' ? 'sản phẩm' : 'khách hàng'} đã xóa`}
+                    </div>
+                )}
 
             {/* Bulk Delete Dialog */}
             <Dialog

@@ -2,7 +2,7 @@
  * Preview Dialog for AI-powered price list import.
  * Shows detected products with match information and allows user to review/edit before confirming.
  */
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../ui/dialog'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
@@ -28,7 +28,7 @@ interface PriceListPreviewDialogProps {
       action: ImportAction
       product_id?: number | null
       name: string
-      price: number
+      price?: number | null
       import_price?: number | null
       unit?: string | null
       category?: string | null
@@ -49,11 +49,11 @@ export function PriceListPreviewDialog({
   const [items, setItems] = useState<PreviewItem[]>([])
 
   // Initialize items when preview data changes
-  useState(() => {
+  useEffect(() => {
     if (previewData) {
       setItems(previewData.items)
     }
-  })
+  }, [previewData])
 
   // Update item
   const updateItem = (index: number, updates: Partial<PreviewItem>) => {
@@ -103,7 +103,7 @@ export function PriceListPreviewDialog({
           action,
           product_id: productId,
           name: item.user_name || item.detected_name,
-          price: item.user_price !== undefined ? item.user_price : item.detected_price,
+          price: item.user_price !== undefined ? item.user_price : item.detected_price || null,
           import_price:
             item.user_import_price !== undefined
               ? item.user_import_price
@@ -239,7 +239,7 @@ function PreviewRow({ item, onUpdate }: PreviewRowProps) {
 
   const currentAction = item.user_action || item.suggested_action
   const currentName = item.user_name || item.detected_name
-  const currentPrice = item.user_price !== undefined ? item.user_price : item.detected_price
+  const currentPrice = item.user_price !== undefined ? item.user_price : (item.detected_price || null)
   const currentImportPrice =
     item.user_import_price !== undefined
       ? item.user_import_price
@@ -302,12 +302,13 @@ function PreviewRow({ item, onUpdate }: PreviewRowProps) {
         {isEditing ? (
           <Input
             type="number"
-            value={currentPrice}
-            onChange={(e) => onUpdate({ user_price: parseFloat(e.target.value) })}
+            value={currentPrice || ''}
+            onChange={(e) => onUpdate({ user_price: e.target.value ? parseFloat(e.target.value) : null })}
             className="w-32"
+            placeholder="Tùy chọn"
           />
         ) : (
-          <div className="font-medium">{currentPrice.toLocaleString('vi-VN')}đ</div>
+          <div className="font-medium">{currentPrice ? `${currentPrice.toLocaleString('vi-VN')}đ` : '-'}</div>
         )}
       </td>
 

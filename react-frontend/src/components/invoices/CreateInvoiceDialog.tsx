@@ -118,7 +118,13 @@ export function CreateInvoiceDialog({
 
     // Calculate totals
     const subtotal = useMemo(() => {
-        return lineItems.reduce((sum, item) => sum + (item.product.price * item.quantity), 0)
+        return lineItems.reduce((sum, item) => {
+            // Guard: only add to sum if product has a valid price
+            if (item.product.price) {
+                return sum + (item.product.price * item.quantity)
+            }
+            return sum
+        }, 0)
     }, [lineItems])
 
     const total = useMemo(() => {
@@ -140,6 +146,12 @@ export function CreateInvoiceDialog({
 
     // Add product to line items
     const addProduct = (product: Product) => {
+        // CRITICAL: Don't allow adding products without price to invoice
+        if (!product.price || product.price <= 0) {
+            toast.error(`Không thể thêm "${product.name}" vào hóa đơn: chưa có giá bán`)
+            return
+        }
+
         const existingItem = lineItems.find(item => item.product.id === product.id)
         if (existingItem) {
             // Increase quantity if already exists
@@ -214,21 +226,21 @@ export function CreateInvoiceDialog({
             notes: notes || undefined,
             status: 'processing'
         })
-        .then(() => {
-            // Chỉ invalidate và show toast nếu component còn mounted
-            if (isMountedRef.current) {
-                queryClient.invalidateQueries({ queryKey: ['invoices'] })
-                queryClient.invalidateQueries({ queryKey: ['dashboard'] })
-                queryClient.invalidateQueries({ queryKey: ['statistics'] })
-                toast.info('Đã lưu hóa đơn chờ xử lý. Bạn có thể tiếp tục tạo sau.')
-            }
-        })
-        .catch((error) => {
-            if (isMountedRef.current) {
-                console.error('Không thể lưu hóa đơn chờ xử lý:', error)
-                toast.error('Không thể lưu hóa đơn chờ xử lý')
-            }
-        })
+            .then(() => {
+                // Chỉ invalidate và show toast nếu component còn mounted
+                if (isMountedRef.current) {
+                    queryClient.invalidateQueries({ queryKey: ['invoices'] })
+                    queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+                    queryClient.invalidateQueries({ queryKey: ['statistics'] })
+                    toast.info('Đã lưu hóa đơn chờ xử lý. Bạn có thể tiếp tục tạo sau.')
+                }
+            })
+            .catch((error) => {
+                if (isMountedRef.current) {
+                    console.error('Không thể lưu hóa đơn chờ xử lý:', error)
+                    toast.error('Không thể lưu hóa đơn chờ xử lý')
+                }
+            })
     }, [
         hasDraftData,
         isSubmitting,
@@ -571,7 +583,7 @@ export function CreateInvoiceDialog({
                                                                     )}
                                                                 </td>
                                                                 <td className="p-2 text-sm text-right">
-                                                                    {product.price.toLocaleString('vi-VN')}đ
+                                                                    {product.price ? product.price.toLocaleString('vi-VN') : '-'}đ
                                                                 </td>
                                                                 <td className="p-2 text-sm text-center">{product.stock_quantity}</td>
                                                                 <td className="p-2 text-center">
@@ -580,6 +592,8 @@ export function CreateInvoiceDialog({
                                                                         size="sm"
                                                                         variant={isSelected ? 'secondary' : 'ghost'}
                                                                         onClick={() => addProduct(product)}
+                                                                        disabled={!product.price || product.price <= 0}
+                                                                        title={!product.price || product.price <= 0 ? 'Sản phẩm chưa có giá' : ''}
                                                                     >
                                                                         {isSelected ? (
                                                                             <Check className="h-4 w-4 text-green-600" />
@@ -618,7 +632,7 @@ export function CreateInvoiceDialog({
                                                     <div>
                                                         <p className="text-sm font-medium leading-tight">{item.product.name}</p>
                                                         <p className="text-xs text-muted-foreground mt-1">
-                                                            Đơn giá: {item.product.price.toLocaleString('vi-VN')}đ
+                                                            Đơn giá: {item.product.price ? item.product.price.toLocaleString('vi-VN') : '0'}đ
                                                         </p>
                                                     </div>
                                                     <Button
@@ -640,7 +654,7 @@ export function CreateInvoiceDialog({
                                                         className="w-24 text-center"
                                                     />
                                                     <div className="text-sm font-semibold">
-                                                        {(item.product.price * item.quantity).toLocaleString('vi-VN')}đ
+                                                        {item.product.price ? (item.product.price * item.quantity).toLocaleString('vi-VN') : '0'}đ
                                                     </div>
                                                 </div>
                                             </div>

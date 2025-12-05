@@ -141,7 +141,7 @@ class ProductService:
     def create_product(
         self,
         name: str,
-        price: float,
+        price: Optional[float] = None,
         import_price: Optional[float] = None,
         description: Optional[str] = None,
         category: Optional[str] = None,
@@ -154,8 +154,8 @@ class ProductService:
 
         Args:
             name: Product name
-            price: Product price
-            import_price: Product import/cost price
+            price: Product sale price (optional)
+            import_price: Product import/cost price (optional)
             description: Product description
             category: Product category
             unit: Unit of measurement
@@ -314,8 +314,8 @@ class ProductService:
             WHERE products_fts MATCH :query
               AND p.is_active = :is_active
               AND (:category IS NULL OR p.category = :category)
-              AND (:min_price IS NULL OR p.price >= :min_price)
-              AND (:max_price IS NULL OR p.price <= :max_price)
+              AND (:min_price IS NULL OR (p.price IS NOT NULL AND p.price >= :min_price))
+              AND (:max_price IS NULL OR (p.price IS NOT NULL AND p.price <= :max_price))
             ORDER BY fts.rank
             LIMIT 50
         """)
@@ -355,9 +355,9 @@ class ProductService:
         if category:
             filters.append(Product.category == category)
         if min_price is not None:
-            filters.append(Product.price >= min_price)
+            filters.append(and_(Product.price.isnot(None), Product.price >= min_price))
         if max_price is not None:
-            filters.append(Product.price <= max_price)
+            filters.append(and_(Product.price.isnot(None), Product.price <= max_price))
 
         return self.db.query(Product).filter(and_(*filters)).limit(50).all()
 
@@ -378,9 +378,9 @@ class ProductService:
         if category:
             filters.append(Product.category == category)
         if min_price is not None:
-            filters.append(Product.price >= min_price)
+            filters.append(and_(Product.price.isnot(None), Product.price >= min_price))
         if max_price is not None:
-            filters.append(Product.price <= max_price)
+            filters.append(and_(Product.price.isnot(None), Product.price <= max_price))
         if exclude_ids:
             filters.append(Product.id.notin_(exclude_ids))
 
@@ -432,9 +432,9 @@ class ProductService:
         if category:
             filters.append(Product.category == category)
         if min_price is not None:
-            filters.append(Product.price >= min_price)
+            filters.append(and_(Product.price.isnot(None), Product.price >= min_price))
         if max_price is not None:
-            filters.append(Product.price <= max_price)
+            filters.append(and_(Product.price.isnot(None), Product.price <= max_price))
         if exclude_ids:
             filters.append(Product.id.notin_(exclude_ids))
 
@@ -850,13 +850,17 @@ class ProductService:
             new_price: New price
             reason: Reason for price change
         """
-        history = PriceHistory(
-            product_id=product.id,
-            old_price=product.price,
-            new_price=new_price,
-            reason=reason
-        )
-        self.db.add(history)
+        # Only record price history if the product had a previous price
+        # Skip if old price is None to avoid NOT NULL constraint violation
+        if product.price is not None:
+            history = PriceHistory(
+                product_id=product.id,
+                old_price=product.price,
+                new_price=new_price,
+                reason=reason
+            )
+            self.db.add(history)
+
 
     def get_price_history(self, product_id: int) -> List[PriceHistory]:
         """

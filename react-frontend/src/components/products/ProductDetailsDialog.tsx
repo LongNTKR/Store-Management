@@ -26,7 +26,7 @@ export function ProductDetailsDialog({ product, open, onOpenChange }: ProductDet
     const images = product.images || []
     const hasImages = images.length > 0
     const activeImage = hasImages ? getProductImageUrl(images[currentImageIndex]) : ''
-    const profitAmount = product.import_price != null ? product.price - product.import_price : null
+    const profitAmount = product.price && product.import_price != null ? product.price - product.import_price : null
     const profitPercent =
         profitAmount !== null && product.import_price
             ? ((profitAmount / product.import_price) * 100).toFixed(1)
@@ -108,7 +108,7 @@ export function ProductDetailsDialog({ product, open, onOpenChange }: ProductDet
                     <div className="space-y-2">
                         <div className="flex items-center gap-2">
                             <p className="text-2xl font-semibold text-green-600">
-                                💰 {formatCurrency(product.price)}
+                                💰 {product.price ? formatCurrency(product.price) : 'Chưa cập nhật'}
                             </p>
                             {profitAmount !== null && (
                                 <span className="relative inline-flex items-center" aria-label="Xem lãi/lỗ">

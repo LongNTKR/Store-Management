@@ -50,7 +50,7 @@ class PreviewItem(BaseModel):
     """Preview item with match information."""
     # Detected data
     detected_name: str
-    detected_price: float
+    detected_price: Optional[float] = None  # Optional - products can have only import_price
     detected_import_price: Optional[float] = None
     detected_unit: Optional[str] = None
     detected_category: Optional[str] = None
@@ -92,8 +92,8 @@ class ConfirmImportItem(BaseModel):
 
     # Product data (user may have edited these)
     name: str = Field(..., min_length=1)
-    price: float = Field(..., gt=0)
-    import_price: Optional[float] = Field(None, ge=0)
+    price: Optional[float] = Field(None, gt=0, description="Sale price (optional)")
+    import_price: Optional[float] = Field(None, ge=0, description="Import/wholesale price (optional)")
     unit: Optional[str] = None
     category: Optional[str] = None
 
