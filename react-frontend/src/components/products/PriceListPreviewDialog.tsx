@@ -47,6 +47,8 @@ export function PriceListPreviewDialog({
 }: PriceListPreviewDialogProps) {
   // Local state for user modifications
   const [items, setItems] = useState<PreviewItem[]>([])
+  // State for confirmation dialog
+  const [showCloseConfirmation, setShowCloseConfirmation] = useState(false)
 
   // Initialize items when preview data changes
   useEffect(() => {
@@ -54,6 +56,27 @@ export function PriceListPreviewDialog({
       setItems(previewData.items)
     }
   }, [previewData])
+
+  // Handle close with confirmation
+  const handleClose = (open: boolean) => {
+    if (!open && previewData && !isConfirming) {
+      // Show confirmation before closing
+      setShowCloseConfirmation(true)
+    } else {
+      onOpenChange(open)
+    }
+  }
+
+  // Confirm close
+  const confirmClose = () => {
+    setShowCloseConfirmation(false)
+    onOpenChange(false)
+  }
+
+  // Cancel close
+  const cancelClose = () => {
+    setShowCloseConfirmation(false)
+  }
 
   // Update item
   const updateItem = (index: number, updates: Partial<PreviewItem>) => {
@@ -120,109 +143,133 @@ export function PriceListPreviewDialog({
   if (!previewData) return null
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Xem Trước Danh Sách Nhập</DialogTitle>
-          <div className="text-sm text-gray-500">
-            AI Provider: <span className="font-semibold">{previewData.provider_used}</span>
+    <>
+      <Dialog open={open} onOpenChange={handleClose}>
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Xem Trước Danh Sách Nhập</DialogTitle>
+            <div className="text-sm text-gray-500">
+              AI Provider: <span className="font-semibold">{previewData.provider_used}</span>
+            </div>
+          </DialogHeader>
+
+          {/* Summary Cards */}
+          <div className="grid grid-cols-4 gap-4 my-4">
+            <Card className="p-4">
+              <div className="text-2xl font-bold">{previewData.summary.total}</div>
+              <div className="text-sm text-gray-500">Tổng cộng</div>
+            </Card>
+            <Card className="p-4">
+              <div className="text-2xl font-bold text-green-600">
+                {previewData.summary.new_count}
+              </div>
+              <div className="text-sm text-gray-500">Sản phẩm mới</div>
+            </Card>
+            <Card className="p-4">
+              <div className="text-2xl font-bold text-blue-600">
+                {previewData.summary.update_count}
+              </div>
+              <div className="text-sm text-gray-500">Cập nhật</div>
+            </Card>
+            <Card className="p-4">
+              <div className="text-2xl font-bold text-orange-600">
+                {previewData.summary.similar_count}
+              </div>
+              <div className="text-sm text-gray-500">Tương tự</div>
+            </Card>
           </div>
-        </DialogHeader>
 
-        {/* Summary Cards */}
-        <div className="grid grid-cols-4 gap-4 my-4">
-          <Card className="p-4">
-            <div className="text-2xl font-bold">{previewData.summary.total}</div>
-            <div className="text-sm text-gray-500">Tổng cộng</div>
-          </Card>
-          <Card className="p-4">
-            <div className="text-2xl font-bold text-green-600">
-              {previewData.summary.new_count}
-            </div>
-            <div className="text-sm text-gray-500">Sản phẩm mới</div>
-          </Card>
-          <Card className="p-4">
-            <div className="text-2xl font-bold text-blue-600">
-              {previewData.summary.update_count}
-            </div>
-            <div className="text-sm text-gray-500">Cập nhật</div>
-          </Card>
-          <Card className="p-4">
-            <div className="text-2xl font-bold text-orange-600">
-              {previewData.summary.similar_count}
-            </div>
-            <div className="text-sm text-gray-500">Tương tự</div>
-          </Card>
-        </div>
-
-        {/* Bulk Actions */}
-        <div className="flex gap-2 mb-4">
-          <Button variant="outline" size="sm" onClick={acceptAll}>
-            Chấp nhận tất cả
-          </Button>
-          <Button variant="outline" size="sm" onClick={skipAll}>
-            Bỏ qua tất cả
-          </Button>
-        </div>
-
-        {/* Preview Table */}
-        <div className="border rounded-lg overflow-hidden">
-          <table className="w-full">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">
-                  Tên sản phẩm
-                </th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">
-                  Giá bán
-                </th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">
-                  Giá nhập
-                </th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">
-                  Trạng thái
-                </th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">
-                  Hành động
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {items.map((item, index) => (
-                <PreviewRow
-                  key={index}
-                  item={item}
-                  onUpdate={(updates) => updateItem(index, updates)}
-                />
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Errors from failed providers */}
-        {previewData.errors.length > 0 && (
-          <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-            <div className="text-sm font-semibold text-yellow-800 mb-2">
-              Cảnh báo từ các providers thất bại:
-            </div>
-            <ul className="list-disc list-inside text-sm text-yellow-700">
-              {previewData.errors.slice(0, 3).map((error, idx) => (
-                <li key={idx}>{error}</li>
-              ))}
-            </ul>
+          {/* Bulk Actions */}
+          <div className="flex gap-2 mb-4">
+            <Button variant="outline" size="sm" onClick={acceptAll}>
+              Chấp nhận tất cả
+            </Button>
+            <Button variant="outline" size="sm" onClick={skipAll}>
+              Bỏ qua tất cả
+            </Button>
           </div>
-        )}
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isConfirming}>
-            Hủy
-          </Button>
-          <Button onClick={handleConfirm} disabled={confirmedCount === 0 || isConfirming}>
-            {isConfirming ? 'Đang nhập...' : `Xác nhận nhập (${confirmedCount} sản phẩm)`}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          {/* Preview Table */}
+          <div className="border rounded-lg overflow-hidden">
+            <table className="w-full">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">
+                    Tên sản phẩm
+                  </th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">
+                    Giá bán
+                  </th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">
+                    Giá nhập
+                  </th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">
+                    Trạng thái
+                  </th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">
+                    Hành động
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {items.map((item, index) => (
+                  <PreviewRow
+                    key={index}
+                    item={item}
+                    onUpdate={(updates) => updateItem(index, updates)}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Errors from failed providers */}
+          {previewData.errors.length > 0 && (
+            <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <div className="text-sm font-semibold text-yellow-800 mb-2">
+                Cảnh báo từ các providers thất bại:
+              </div>
+              <ul className="list-disc list-inside text-sm text-yellow-700">
+                {previewData.errors.slice(0, 3).map((error, idx) => (
+                  <li key={idx}>{error}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCloseConfirmation(true)} disabled={isConfirming}>
+              Hủy
+            </Button>
+            <Button onClick={handleConfirm} disabled={confirmedCount === 0 || isConfirming}>
+              {isConfirming ? 'Đang nhập...' : `Xác nhận nhập (${confirmedCount} sản phẩm)`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Close Confirmation Dialog */}
+      <Dialog open={showCloseConfirmation} onOpenChange={setShowCloseConfirmation}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Xác nhận thoát</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm text-muted-foreground">
+              Bạn có chắc muốn thoát không? Dữ liệu đã phân tích sẽ bị mất và bạn sẽ phải phân tích lại.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={cancelClose}>
+              Ở lại
+            </Button>
+            <Button variant="destructive" onClick={confirmClose}>
+              Thoát
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }
 

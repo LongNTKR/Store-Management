@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { useToast } from '@/hooks/use-toast'
+import { toast } from 'sonner'
 import { Key, Lock, Eye, EyeOff, Trash2, Save, Shield, RefreshCw, Loader2, UploadCloud } from 'lucide-react'
 import { aiConfigService, type AIModelInfo } from '@/services/aiConfig'
 import type { AIConfig } from '@/services/aiConfig'
@@ -14,6 +14,7 @@ import type { ImportResult } from '@/types'
 import * as importService from '@/services/import'
 import type { PreviewResponse } from '@/types/import'
 import { PriceListPreviewDialog } from '@/components/products/PriceListPreviewDialog'
+import { useQueryClient } from '@tanstack/react-query'
 import {
     Select,
     SelectContent,
@@ -33,7 +34,7 @@ const AI_PROVIDERS = [
 ]
 
 export function AIPage() {
-    const { toast } = useToast()
+    const queryClient = useQueryClient()
     const [configs, setConfigs] = useState<AIConfig[]>([])
     const [loading, setLoading] = useState(true)
     const [masterPasswordSet, setMasterPasswordSet] = useState(false)
@@ -123,11 +124,7 @@ export function AIPage() {
             setConfigs(configList)
         } catch (error) {
             console.error('Failed to load AI configurations:', error)
-            toast({
-                variant: 'destructive',
-                title: 'Lỗi',
-                description: 'Không thể tải cấu hình AI'
-            })
+            toast.error('Không thể tải cấu hình AI')
         } finally {
             setLoading(false)
         }
@@ -135,20 +132,12 @@ export function AIPage() {
 
     const handleSetMasterPassword = async () => {
         if (masterPassword.length < 8) {
-            toast({
-                variant: 'destructive',
-                title: 'Lỗi',
-                description: 'Mật khẩu phải có ít nhất 8 ký tự'
-            })
+            toast.error('Mật khẩu phải có ít nhất 8 ký tự')
             return
         }
 
         if (masterPassword !== confirmPassword) {
-            toast({
-                variant: 'destructive',
-                title: 'Lỗi',
-                description: 'Mật khẩu xác nhận không khớp'
-            })
+            toast.error('Mật khẩu xác nhận không khớp')
             return
         }
 
@@ -157,20 +146,13 @@ export function AIPage() {
                 password: masterPassword,
                 confirm_password: confirmPassword
             })
-            toast({
-                title: 'Thành công',
-                description: 'Đã thiết lập mật khẩu chủ'
-            })
+            toast.success('Thành công', { description: 'Đã thiết lập mật khẩu chủ', duration: 4000 })
             setMasterPasswordSet(true)
             setShowMasterPasswordDialog(false)
             setMasterPassword('')
             setConfirmPassword('')
         } catch (error) {
-            toast({
-                variant: 'destructive',
-                title: 'Lỗi',
-                description: 'Không thể thiết lập mật khẩu'
-            })
+            toast.error('Không thể thiết lập mật khẩu')
         }
     }
 
@@ -183,11 +165,7 @@ export function AIPage() {
         const isValid = await aiConfigService.verifyMasterPassword({ password: verifyPassword })
 
         if (!isValid) {
-            toast({
-                variant: 'destructive',
-                title: 'Lỗi',
-                description: 'Mật khẩu không đúng'
-            })
+            toast.error('Mật khẩu không đúng')
             return
         }
 
@@ -203,20 +181,12 @@ export function AIPage() {
 
     const handleSaveApiKey = async () => {
         if (!selectedProvider || !apiKey.trim()) {
-            toast({
-                variant: 'destructive',
-                title: 'Lỗi',
-                description: 'Vui lòng nhập API key'
-            })
+            toast.error('Vui lòng nhập API key')
             return
         }
 
         if (!masterPasswordSet) {
-            toast({
-                variant: 'destructive',
-                title: 'Lỗi',
-                description: 'Vui lòng thiết lập mật khẩu chủ trước'
-            })
+            toast.error('Vui lòng thiết lập mật khẩu chủ trước')
             return
         }
 
@@ -229,21 +199,14 @@ export function AIPage() {
                     master_password: password
                 })
 
-                toast({
-                    title: 'Thành công',
-                    description: 'Đã lưu API key'
-                })
+                toast.success('Thành công', { description: 'Đã lưu API key', duration: 4000 })
 
                 setShowApiKeyDialog(false)
                 setApiKey('')
                 setSelectedProvider(null)
                 await loadData()
             } catch (error) {
-                toast({
-                    variant: 'destructive',
-                    title: 'Lỗi',
-                    description: 'Không thể lưu API key'
-                })
+                toast.error('Không thể lưu API key')
             }
         })
     }
@@ -252,17 +215,10 @@ export function AIPage() {
         requestPasswordVerification(async (password: string) => {
             try {
                 await aiConfigService.deleteConfig(provider, password)
-                toast({
-                    title: 'Thành công',
-                    description: 'Đã xóa cấu hình'
-                })
+                toast.success('Thành công', { description: 'Đã xóa cấu hình', duration: 4000 })
                 await loadData()
             } catch (error) {
-                toast({
-                    variant: 'destructive',
-                    title: 'Lỗi',
-                    description: 'Không thể xóa cấu hình'
-                })
+                toast.error('Không thể xóa cấu hình')
             }
         })
     }
@@ -271,17 +227,10 @@ export function AIPage() {
         requestPasswordVerification(async (password: string) => {
             try {
                 await aiConfigService.toggleProvider(provider, enabled, password)
-                toast({
-                    title: 'Thành công',
-                    description: enabled ? 'Đã bật nhà cung cấp' : 'Đã tắt nhà cung cấp'
-                })
+                toast.success('Thành công', { description: enabled ? 'Đã bật nhà cung cấp' : 'Đã tắt nhà cung cấp', duration: 4000 })
                 await loadData()
             } catch (error) {
-                toast({
-                    variant: 'destructive',
-                    title: 'Lỗi',
-                    description: 'Không thể thay đổi trạng thái'
-                })
+                toast.error('Không thể thay đổi trạng thái')
             }
         })
     }
@@ -298,11 +247,7 @@ export function AIPage() {
                 const models = await aiConfigService.getAvailableModels(provider, password)
                 setAvailableModels(prev => ({ ...prev, [provider]: models }))
             } catch (error) {
-                toast({
-                    variant: 'destructive',
-                    title: 'Lỗi',
-                    description: 'Không thể tải danh sách mô hình'
-                })
+                toast.error('Không thể tải danh sách mô hình')
             } finally {
                 setLoadingModels(prev => ({ ...prev, [provider]: false }))
             }
@@ -313,10 +258,7 @@ export function AIPage() {
         requestPasswordVerification(async (password: string) => {
             try {
                 const updatedConfig = await aiConfigService.selectModel(provider, model, password)
-                toast({
-                    title: 'Thành công',
-                    description: 'Đã chọn mô hình'
-                })
+                toast.success('Thành công', { description: 'Đã chọn mô hình', duration: 4000 })
                 // Update the specific config in state instead of reloading all data
                 setConfigs(prevConfigs =>
                     prevConfigs.map(config =>
@@ -324,11 +266,7 @@ export function AIPage() {
                     )
                 )
             } catch (error) {
-                toast({
-                    variant: 'destructive',
-                    title: 'Lỗi',
-                    description: 'Không thể chọn mô hình'
-                })
+                toast.error('Không thể chọn mô hình')
             }
         })
     }
@@ -397,11 +335,7 @@ export function AIPage() {
 
         const availableProviders = getAvailableProviders()
         if (availableProviders.length === 0) {
-            toast({
-                variant: 'destructive',
-                title: 'Lỗi',
-                description: 'Vui lòng cấu hình ít nhất một AI provider trong tab Cấu hình AI'
-            })
+            toast.error('Vui lòng cấu hình ít nhất một AI provider trong tab Cấu hình AI')
             return
         }
 
@@ -410,14 +344,9 @@ export function AIPage() {
             const preview = await importService.previewAIImport(aiImportFile)
             setPreviewData(preview)
             setShowPreviewDialog(true)
-            toast({
-                title: 'Phân tích thành công',
-                description: `Tìm thấy ${preview.summary.total} sản phẩm (Provider: ${preview.provider_used})`
-            })
+            toast.success('Phân tích thành công', { description: `Tìm thấy ${preview.summary.total} sản phẩm (Provider: ${preview.provider_used})`, duration: 4000 })
         } catch (error: any) {
-            toast({
-                variant: 'destructive',
-                title: 'Lỗi phân tích ảnh',
+            toast.error('Lỗi phân tích ảnh', {
                 description: error.response?.data?.detail || 'Không thể phân tích ảnh. Vui lòng thử lại.'
             })
         } finally {
@@ -435,18 +364,16 @@ export function AIPage() {
             setImportResult(result)
             setShowPreviewDialog(false)
 
-            toast({
-                title: 'Nhập thành công',
-                description: `Đã nhập ${result.added + result.updated} sản phẩm (${result.added} mới, ${result.updated} cập nhật)`
-            })
+            toast.success('Nhập thành công', { description: `Đã nhập ${result.added + result.updated} sản phẩm (${result.added} mới, ${result.updated} cập nhật)`, duration: 4000 })
+
+            // Invalidate products cache to refresh product list
+            queryClient.invalidateQueries({ queryKey: ['products'] })
 
             // Clear file and preview
             setAiImportFile(null)
             setPreviewData(null)
         } catch (error: any) {
-            toast({
-                variant: 'destructive',
-                title: 'Lỗi nhập sản phẩm',
+            toast.error('Lỗi nhập sản phẩm', {
                 description: error.response?.data?.detail || 'Không thể nhập sản phẩm. Vui lòng thử lại.'
             })
         } finally {
@@ -531,20 +458,38 @@ export function AIPage() {
                         <CardHeader>
                             <div className="flex items-center justify-between">
                                 <CardTitle>Nhập Báo Giá với AI</CardTitle>
-                                <div className="flex items-center gap-2">
-                                    <span className={`text-sm ${networkConnected ? 'text-green-600' : 'text-red-600'}`}>
-                                        {networkConnected ? 'Internet: Đã kết nối' : 'Internet: Mất kết nối'}
-                                    </span>
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-6 w-6"
-                                        onClick={handleCheckNetwork}
-                                        disabled={checkingNetwork}
-                                        title="Kiểm tra kết nối"
-                                    >
-                                        <RefreshCw className={`h-3 w-3 ${checkingNetwork ? 'animate-spin' : ''}`} />
-                                    </Button>
+                                <div className="flex items-center gap-4">
+                                    <div className="flex items-center gap-2">
+                                        <span className={`text-sm ${networkConnected ? 'text-green-600' : 'text-red-600'}`}>
+                                            {networkConnected ? 'Internet: Đã kết nối' : 'Internet: Mất kết nối'}
+                                        </span>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-6 w-6"
+                                            onClick={handleCheckNetwork}
+                                            disabled={checkingNetwork}
+                                            title="Kiểm tra kết nối"
+                                        >
+                                            <RefreshCw className={`h-3 w-3 ${checkingNetwork ? 'animate-spin' : ''}`} />
+                                        </Button>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <span className={`text-sm ${getAvailableProviders().length > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                            {getAvailableProviders().length > 0
+                                                ? `AI: ${getAvailableProviders().length} provider`
+                                                : 'AI: Chưa cấu hình'}
+                                        </span>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-6 w-6"
+                                            onClick={loadData}
+                                            title="Làm mới trạng thái AI"
+                                        >
+                                            <RefreshCw className="h-3 w-3" />
+                                        </Button>
+                                    </div>
                                 </div>
                             </div>
                             <CardDescription>
