@@ -188,8 +188,43 @@ class PriceHistory(Base):
     changed_at = Column(DateTime, default=get_vn_time, index=True)
     reason = Column(String(255), nullable=True)  # e.g., "Price update from supplier"
 
+
     # Relationships
     product = relationship('Product', back_populates='price_history')
 
     def __repr__(self):
         return f"<PriceHistory(product_id={self.product_id}, {self.old_price} -> {self.new_price})>"
+
+
+class AIConfiguration(Base):
+    """AI Configuration model - stores encrypted API keys for AI providers."""
+
+    __tablename__ = 'ai_configurations'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    provider = Column(String(50), unique=True, nullable=False, index=True)  # google, openai, grok, claude, deepseek, qwen
+    display_name = Column(String(100), nullable=False)  # User-friendly name
+    api_key_encrypted = Column(Text, nullable=False)  # Encrypted API key
+    is_enabled = Column(Boolean, default=True)  # Enable/disable provider
+    selected_model = Column(String(100), nullable=True)  # Selected model for this provider
+    
+    # Metadata (using UTC+7 timezone)
+    created_at = Column(DateTime, default=get_vn_time)
+    updated_at = Column(DateTime, default=get_vn_time, onupdate=get_vn_time)
+
+    def __repr__(self):
+        return f"<AIConfiguration(provider='{self.provider}', display_name='{self.display_name}', enabled={self.is_enabled}, model='{self.selected_model}')>"
+
+
+class MasterPassword(Base):
+    """Master Password model - stores hashed master password for AI config access."""
+
+    __tablename__ = 'master_password'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    password_hash = Column(String(255), nullable=False)  # Bcrypt hashed password
+    created_at = Column(DateTime, default=get_vn_time)
+    updated_at = Column(DateTime, default=get_vn_time, onupdate=get_vn_time)
+
+    def __repr__(self):
+        return f"<MasterPassword(id={self.id})>"

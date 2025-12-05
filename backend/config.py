@@ -48,13 +48,28 @@ class Config:
     IMAGE_SEARCH_TOP_K = int(os.getenv("IMAGE_SEARCH_TOP_K", "5"))
     IMAGE_SEARCH_THRESHOLD = float(os.getenv("IMAGE_SEARCH_THRESHOLD", "0.3"))
 
+    # Security & Encryption
+    SECRET_KEY = os.getenv("SECRET_KEY", "")
+    
     @classmethod
     def ensure_directories(cls):
         """Ensure all required directories exist."""
         os.makedirs(cls.IMAGE_DIR, exist_ok=True)
         os.makedirs(cls.INVOICE_DIR, exist_ok=True)
         os.makedirs(cls.TEMP_DIR, exist_ok=True)
+    
+    @classmethod
+    def validate_config(cls):
+        """Validate configuration settings."""
+        if cls.SECRET_KEY and len(cls.SECRET_KEY) < 32:
+            raise ValueError("SECRET_KEY must be at least 32 characters long")
 
 
 # Initialize config
 Config.ensure_directories()
+Config.validate_config()
+
+# Initialize encryption manager if SECRET_KEY is provided
+if Config.SECRET_KEY:
+    from utils.encryption import init_encryption_manager
+    init_encryption_manager(Config.SECRET_KEY)

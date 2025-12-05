@@ -57,15 +57,58 @@ class DatabaseManager:
         """
         Ensure new columns exist when the schema evolves.
 
-        Currently adds import_price to products if missing (existing SQLite DBs).
+        This automatically adds missing columns to existing tables,
+        making the system backward compatible with older database schemas.
         """
         inspector = inspect(self.engine)
-        columns = [col['name'] for col in inspector.get_columns('products')]
 
-        if 'import_price' not in columns:
-            with self.engine.connect() as conn:
-                conn.execute(text("ALTER TABLE products ADD COLUMN import_price FLOAT"))
-                conn.commit()
+        with self.engine.connect() as conn:
+            # Products table columns
+            products_columns = {col['name'] for col in inspector.get_columns('products')}
+            products_migrations = [
+                ('import_price', 'FLOAT'),
+                ('deleted_at', 'DATETIME'),
+                ('normalized_name', 'TEXT'),
+            ]
+            for col_name, col_type in products_migrations:
+                if col_name not in products_columns:
+                    try:
+                        conn.execute(text(f"ALTER TABLE products ADD COLUMN {col_name} {col_type}"))
+                        print(f"✓ Added column: products.{col_name}")
+                    except Exception as e:
+                        print(f"⚠ Could not add products.{col_name}: {e}")
+
+            # Customers table columns
+            customers_columns = {col['name'] for col in inspector.get_columns('customers')}
+            customers_migrations = [
+                ('deleted_at', 'DATETIME'),
+                ('normalized_name', 'TEXT'),
+                ('normalized_phone', 'TEXT'),
+                ('normalized_email', 'TEXT'),
+            ]
+            for col_name, col_type in customers_migrations:
+                if col_name not in customers_columns:
+                    try:
+                        conn.execute(text(f"ALTER TABLE customers ADD COLUMN {col_name} {col_type}"))
+                        print(f"✓ Added column: customers.{col_name}")
+                    except Exception as e:
+                        print(f"⚠ Could not add customers.{col_name}: {e}")
+
+            # Invoices table columns
+            invoices_columns = {col['name'] for col in inspector.get_columns('invoices')}
+            invoices_migrations = [
+                ('normalized_customer_name', 'TEXT'),
+                ('normalized_customer_phone', 'TEXT'),
+            ]
+            for col_name, col_type in invoices_migrations:
+                if col_name not in invoices_columns:
+                    try:
+                        conn.execute(text(f"ALTER TABLE invoices ADD COLUMN {col_name} {col_type}"))
+                        print(f"✓ Added column: invoices.{col_name}")
+                    except Exception as e:
+                        print(f"⚠ Could not add invoices.{col_name}: {e}")
+
+            conn.commit()
 
     def get_session(self) -> Session:
         """

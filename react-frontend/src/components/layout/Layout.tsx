@@ -41,7 +41,7 @@ const menuItems: MenuItem[] = [
         customIcon: '/Image_iasozuiasozuiaso.png'
     },
     { icon: Upload, label: 'Nhập báo giá', path: '/import', customIcon: '/Image_8htcuh8htcuh8htc.png' },
-    { icon: Search, label: 'Tìm kiếm AI', path: '/search', customIcon: '/Image_tzcpqytzcpqytzcp.png' },
+    { icon: Search, label: 'AI', path: '/ai', customIcon: '/Image_tzcpqytzcpqytzcp.png' },
     { icon: FileText, label: 'Hóa đơn', path: '/invoices', customIcon: '/Image_3rudgh3rudgh3rud.png' },
     { icon: Users, label: 'Khách hàng', path: '/customers', customIcon: '/Image_d6ma5pd6ma5pd6ma.png' },
     { icon: Trash2, label: 'Thùng rác', path: '/trash', customIcon: '/Image_yapzehyapzehyapz.png' },
