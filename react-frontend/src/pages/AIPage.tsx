@@ -59,6 +59,14 @@ export function AIPage() {
     const [file, setFile] = useState<File | null>(null)
     const [importResult, setImportResult] = useState<ImportResult | null>(null)
 
+    // Tab state
+    const [activeTab, setActiveTab] = useState(() => localStorage.getItem('aiPageActiveTab') || 'import')
+
+    // Update localStorage when tab changes
+    useEffect(() => {
+        localStorage.setItem('aiPageActiveTab', activeTab)
+    }, [activeTab])
+
     const importMutation = useMutation({
         mutationFn: (payload: File) => searchService.importQuotation(payload),
         onSuccess: (data) => setImportResult(data),
@@ -269,12 +277,17 @@ export function AIPage() {
     const handleSelectModel = async (provider: string, model: string) => {
         requestPasswordVerification(async (password: string) => {
             try {
-                await aiConfigService.selectModel(provider, model, password)
+                const updatedConfig = await aiConfigService.selectModel(provider, model, password)
                 toast({
                     title: 'Thành công',
                     description: 'Đã chọn mô hình'
                 })
-                await loadData()
+                // Update the specific config in state instead of reloading all data
+                setConfigs(prevConfigs =>
+                    prevConfigs.map(config =>
+                        config.provider === provider ? updatedConfig : config
+                    )
+                )
             } catch (error) {
                 toast({
                     variant: 'destructive',
@@ -322,7 +335,7 @@ export function AIPage() {
             </div>
 
             {/* Tabs */}
-            <Tabs defaultValue="import" className="w-full">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                 <TabsList className="grid w-full max-w-md grid-cols-2">
                     <TabsTrigger value="import">Nhập Báo Giá</TabsTrigger>
                     <TabsTrigger value="settings">Cấu Hình AI</TabsTrigger>
@@ -471,6 +484,7 @@ export function AIPage() {
                                                     </Button>
                                                 </div>
                                                 <Select
+                                                    key={`${provider.id}-${config.selected_model || 'empty'}`}
                                                     value={config.selected_model || ''}
                                                     onValueChange={(value) => handleSelectModel(provider.id, value)}
                                                     disabled={!masterPasswordSet}
@@ -486,16 +500,13 @@ export function AIPage() {
                                                         ) : models.length > 0 ? (
                                                             models.map(model => (
                                                                 <SelectItem key={model.id} value={model.id}>
-                                                                    <div className="flex flex-col">
-                                                                        <span className="font-medium">{model.name}</span>
-                                                                        {model.description && (
-                                                                            <span className="text-xs text-muted-foreground">
-                                                                                {model.description}
-                                                                            </span>
-                                                                        )}
-                                                                    </div>
+                                                                    {model.name}
                                                                 </SelectItem>
                                                             ))
+                                                        ) : config.selected_model ? (
+                                                            <SelectItem value={config.selected_model}>
+                                                                {config.selected_model}
+                                                            </SelectItem>
                                                         ) : (
                                                             <SelectItem value="no-models" disabled>
                                                                 Nhấn biểu tượng làm mới để tải mô hình

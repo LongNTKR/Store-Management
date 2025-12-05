@@ -97,6 +97,7 @@ class AIConfigService:
                 display_name=config.display_name,
                 is_enabled=config.is_enabled,
                 has_api_key=bool(config.api_key_encrypted),
+                selected_model=config.selected_model,
                 created_at=config.created_at,
                 updated_at=config.updated_at
             )
