@@ -42,6 +42,8 @@ export function useCreateInvoice() {
             queryClient.invalidateQueries({ queryKey: ['customers'] })
             queryClient.invalidateQueries({ queryKey: ['customer-debts'] })
             queryClient.invalidateQueries({ queryKey: ['customer-debt'] })
+            queryClient.invalidateQueries({ queryKey: ['customer-debt-detail'] })
+            queryClient.invalidateQueries({ queryKey: ['all-customer-debts'] })
 
             toast.success('Tạo hóa đơn thành công!')
         },
@@ -67,6 +69,8 @@ export function useUpdateInvoiceStatus() {
             queryClient.invalidateQueries({ queryKey: ['customers'] })
             queryClient.invalidateQueries({ queryKey: ['customer-debts'] })
             queryClient.invalidateQueries({ queryKey: ['customer-debt'] })
+            queryClient.invalidateQueries({ queryKey: ['customer-debt-detail'] })
+            queryClient.invalidateQueries({ queryKey: ['all-customer-debts'] })
 
             toast.success('Cập nhật trạng thái thành công!')
         },
@@ -91,6 +95,8 @@ export function useUpdateInvoice() {
             queryClient.invalidateQueries({ queryKey: ['customers'] })
             queryClient.invalidateQueries({ queryKey: ['customer-debts'] })
             queryClient.invalidateQueries({ queryKey: ['customer-debt'] })
+            queryClient.invalidateQueries({ queryKey: ['customer-debt-detail'] })
+            queryClient.invalidateQueries({ queryKey: ['all-customer-debts'] })
             toast.success('Cập nhật hóa đơn thành công!')
         },
         onError: (error: any) => {

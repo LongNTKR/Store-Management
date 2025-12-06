@@ -18,7 +18,7 @@ import { RecordPaymentDialog } from '@/components/payments/RecordPaymentDialog'
 const statusStyles: Record<Invoice['status'], string> = {
     pending: 'bg-amber-100 text-amber-800',
     paid: 'bg-emerald-100 text-emerald-800',
-    cancelled: 'bg-gray-200 text-gray-700',
+    cancelled: 'bg-red-100 text-red-800',
     processing: 'bg-blue-100 text-blue-800',
 }
 
@@ -518,7 +518,7 @@ export function InvoicesPage() {
                                         )}
                                         PDF
                                     </Button>
-                                    {invoice.remaining_amount > 0 && invoice.customer_id && (
+                                    {invoice.remaining_amount > 0 && invoice.customer_id && invoice.status !== 'cancelled' && (
                                         <Button
                                             variant="default"
                                             size="sm"

@@ -28,6 +28,7 @@ import { toast } from 'sonner'
 import { cn, formatCurrency } from '@/lib/utils'
 import { paymentService } from '@/services/payments'
 import { RecordPaymentDialog } from '@/components/payments/RecordPaymentDialog'
+import { CustomerDebtDetailDialog } from '@/components/debt/CustomerDebtDetailDialog'
 
 export function CustomersPage() {
     const [searchQuery, setSearchQuery] = useState('')
@@ -38,6 +39,8 @@ export function CustomersPage() {
     const [selectedCustomerIds, setSelectedCustomerIds] = useState<number[]>([])
     const [paymentDialogOpen, setPaymentDialogOpen] = useState(false)
     const [paymentCustomerId, setPaymentCustomerId] = useState<number | null>(null)
+    const [debtDetailDialogOpen, setDebtDetailDialogOpen] = useState(false)
+    const [debtDetailCustomer, setDebtDetailCustomer] = useState<{ id: number, name: string } | null>(null)
     const queryClient = useQueryClient()
     const debouncedSearch = useDebounce(searchQuery.trim(), 300)
 
@@ -306,16 +309,29 @@ export function CustomersPage() {
                                                     </p>
                                                 )}
 
-                                                <Button
-                                                    size="sm"
-                                                    className="mt-2 w-full"
-                                                    onClick={() => {
-                                                        setPaymentCustomerId(customer.id)
-                                                        setPaymentDialogOpen(true)
-                                                    }}
-                                                >
-                                                    Thu nợ
-                                                </Button>
+                                                <div className="mt-2 flex gap-2">
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        className="flex-1"
+                                                        onClick={() => {
+                                                            setDebtDetailCustomer({ id: customer.id, name: customer.name })
+                                                            setDebtDetailDialogOpen(true)
+                                                        }}
+                                                    >
+                                                        Xem chi tiết
+                                                    </Button>
+                                                    <Button
+                                                        size="sm"
+                                                        className="flex-1"
+                                                        onClick={() => {
+                                                            setPaymentCustomerId(customer.id)
+                                                            setPaymentDialogOpen(true)
+                                                        }}
+                                                    >
+                                                        Thu nợ
+                                                    </Button>
+                                                </div>
                                             </div>
                                         ) : (
                                             isFetchingDebt && (
@@ -357,6 +373,18 @@ export function CustomersPage() {
                     queryClient.invalidateQueries({ queryKey: ['customer-debts'] })
                     queryClient.invalidateQueries({ queryKey: ['customers'] })
                 }}
+            />
+
+            <CustomerDebtDetailDialog
+                open={debtDetailDialogOpen}
+                onOpenChange={(open) => {
+                    setDebtDetailDialogOpen(open)
+                    if (!open) {
+                        setDebtDetailCustomer(null)
+                    }
+                }}
+                customerId={debtDetailCustomer?.id || null}
+                customerName={debtDetailCustomer?.name}
             />
 
             <AddCustomerDialog open={showAddDialog} onOpenChange={setShowAddDialog} />

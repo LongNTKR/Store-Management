@@ -12,8 +12,12 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { formatCurrency, formatDate } from "@/lib/utils"
 import type { Invoice } from "@/types"
+import { useQuery } from "@tanstack/react-query"
+import { paymentService } from "@/services/payments"
+import { Loader2 } from "lucide-react"
 
 const paymentMethodMap: Record<string, string> = {
     cash: 'Tiền mặt',
@@ -32,6 +36,13 @@ export function InvoiceDetailsDialog({
     open,
     onOpenChange,
 }: InvoiceDetailsDialogProps) {
+    // Fetch payment allocations for this invoice
+    const { data: paymentAllocations, isLoading: isLoadingPayments } = useQuery({
+        queryKey: ['invoice-payments', invoice?.id],
+        queryFn: () => paymentService.getInvoicePayments(invoice!.id),
+        enabled: !!invoice?.id && open
+    })
+
     if (!invoice) return null
 
     return (
@@ -43,7 +54,13 @@ export function InvoiceDetailsDialog({
                     </DialogTitle>
                 </DialogHeader>
 
-                <div className="grid gap-6 py-4">
+                <Tabs defaultValue="details" className="w-full">
+                    <TabsList className="grid w-full grid-cols-2">
+                        <TabsTrigger value="details">Chi tiết</TabsTrigger>
+                        <TabsTrigger value="payments">Thanh toán</TabsTrigger>
+                    </TabsList>
+
+                    <TabsContent value="details" className="space-y-6 py-4">
                     {/* Customer Info */}
                     <div className="grid grid-cols-2 gap-4 rounded-lg bg-muted/50 p-4">
                         <div>
@@ -144,7 +161,80 @@ export function InvoiceDetailsDialog({
                             {invoice.notes}
                         </div>
                     )}
-                </div>
+                    </TabsContent>
+
+                    {/* Tab: Payments */}
+                    <TabsContent value="payments" className="space-y-4 py-4">
+                        <div className="space-y-4">
+                            {/* Payment summary */}
+                            <div className="grid grid-cols-3 gap-4 p-4 bg-muted/50 rounded-lg">
+                                <div>
+                                    <p className="text-sm text-muted-foreground">Tổng hóa đơn</p>
+                                    <p className="text-lg font-semibold">{formatCurrency(invoice.total)}</p>
+                                </div>
+                                <div>
+                                    <p className="text-sm text-muted-foreground">Đã thanh toán</p>
+                                    <p className="text-lg font-semibold text-emerald-600">
+                                        {formatCurrency(invoice.paid_amount || 0)}
+                                    </p>
+                                </div>
+                                <div>
+                                    <p className="text-sm text-muted-foreground">Còn lại</p>
+                                    <p className="text-lg font-semibold text-amber-600">
+                                        {formatCurrency(invoice.remaining_amount || 0)}
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Payment allocations timeline */}
+                            <div className="space-y-2">
+                                <h4 className="font-semibold">Lịch sử thanh toán:</h4>
+
+                                {isLoadingPayments ? (
+                                    <div className="flex items-center justify-center py-8">
+                                        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                                        <span className="ml-2 text-sm text-muted-foreground">Đang tải...</span>
+                                    </div>
+                                ) : paymentAllocations && paymentAllocations.length > 0 ? (
+                                    <div className="space-y-2 border rounded-lg p-4">
+                                        {paymentAllocations.map((allocation) => (
+                                            <div
+                                                key={allocation.id}
+                                                className="flex items-start gap-3 p-3 border-l-2 border-primary/50 bg-muted/30 rounded-r"
+                                            >
+                                                <div className="flex-1 space-y-1">
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="font-medium">{allocation.payment_number}</span>
+                                                        <span className="font-semibold text-emerald-600">
+                                                            {formatCurrency(allocation.amount)}
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                                                        <span>{formatDate(allocation.allocation_date, 'dd/MM/yyyy HH:mm')}</span>
+                                                        {allocation.payment_method && (
+                                                            <span>• {paymentMethodMap[allocation.payment_method] || allocation.payment_method}</span>
+                                                        )}
+                                                    </div>
+                                                    {allocation.notes && (
+                                                        <p className="text-xs text-muted-foreground italic">
+                                                            {allocation.notes}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="text-center py-8 rounded-lg border border-dashed">
+                                        <p className="text-sm text-muted-foreground">
+                                            Chưa có thanh toán nào cho hóa đơn này
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </TabsContent>
+                </Tabs>
             </DialogContent>
         </Dialog>
     )

@@ -9,6 +9,7 @@ import { AIPage } from './pages/AIPage'
 import { InvoicesPage } from './pages/InvoicesPage'
 import { CustomersPage } from './pages/CustomersPage'
 import { StatsPage } from './pages/StatsPage'
+import { DebtManagementPage } from './pages/DebtManagementPage'
 
 function App() {
   return (
@@ -22,6 +23,7 @@ function App() {
           <Route path="/ai" element={<AIPage />} />
           <Route path="/invoices" element={<InvoicesPage />} />
           <Route path="/customers" element={<CustomersPage />} />
+          <Route path="/debt-management" element={<DebtManagementPage />} />
           <Route path="/trash" element={<TrashPage />} />
           <Route path="/stats" element={<StatsPage />} />
         </Routes>

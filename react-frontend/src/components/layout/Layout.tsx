@@ -9,6 +9,7 @@ import {
     Search,
     FileText,
     Users,
+    Receipt,
     BarChart3,
     Trash2,
     ChevronLeft,
@@ -42,6 +43,7 @@ const menuItems: MenuItem[] = [
     { icon: Search, label: 'AI', path: '/ai', customIcon: '/Image_tzcpqytzcpqytzcp.png' },
     { icon: FileText, label: 'Hóa đơn', path: '/invoices', customIcon: '/Image_3rudgh3rudgh3rud.png' },
     { icon: Users, label: 'Khách hàng', path: '/customers', customIcon: '/Image_d6ma5pd6ma5pd6ma.png' },
+    { icon: Receipt, label: 'Công nợ', path: '/debt-management', customIcon: '/Image_debt_mgmt.png' },
     { icon: Trash2, label: 'Thùng rác', path: '/trash', customIcon: '/Image_yapzehyapzehyapz.png' },
     { icon: BarChart3, label: 'Thống kê', path: '/stats', customIcon: '/Image_dtv8tsdtv8tsdtv8.png' },
 ]

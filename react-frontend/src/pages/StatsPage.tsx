@@ -17,7 +17,7 @@ export function StatsPage() {
     const paymentTotals = [
         { label: 'Đã thanh toán', value: stats?.paid_invoices || 0, color: 'bg-emerald-500' },
         { label: 'Chưa thanh toán', value: stats?.pending_invoices || 0, color: 'bg-amber-500' },
-        { label: 'Đã hủy', value: stats?.cancelled_invoices || 0, color: 'bg-slate-400' },
+        { label: 'Đã hủy', value: stats?.cancelled_invoices || 0, color: 'bg-red-500' },
     ]
 
     const totalPayments = paymentTotals.reduce((sum, item) => sum + item.value, 0) || 1

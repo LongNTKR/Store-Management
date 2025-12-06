@@ -9,8 +9,10 @@ export interface PaymentAllocation {
   payment_id: number
   invoice_id: number
   invoice_number: string
+  payment_number?: string
   amount: number
   allocation_date: string
+  payment_method?: string
   notes?: string
 }
 
