@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from apscheduler.schedulers.background import BackgroundScheduler
-from api.routes import products, customers, invoices, import_routes, search, dashboard, ai_config, units
+from api.routes import products, customers, invoices, import_routes, search, dashboard, ai_config, units, payments
 from jobs import cleanup_old_deletions, cleanup_processing_invoices
 from config import Config
 
@@ -68,6 +68,7 @@ app.include_router(dashboard.router, prefix="/api", tags=["Dashboard"])
 app.include_router(products.router, prefix="/api", tags=["Products"])
 app.include_router(customers.router, prefix="/api", tags=["Customers"])
 app.include_router(invoices.router, prefix="/api", tags=["Invoices"])
+app.include_router(payments.router, prefix="/api", tags=["Payments"])
 app.include_router(import_routes.router, prefix="/api", tags=["Import"])
 app.include_router(search.router, prefix="/api", tags=["Search"])
 app.include_router(ai_config.router, tags=["AI Configuration"])

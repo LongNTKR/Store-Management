@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ChangeEvent } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -13,6 +14,7 @@ import { useDebounce } from '@/hooks/useDebounce'
 import { useInfiniteScroll } from '@/hooks/useInfiniteScroll'
 import { Search, Trash2, UserRound, Pencil, Circle, CheckCircle2, Sparkles } from 'lucide-react'
 import type { Customer } from '@/types'
+import type { DebtSummary } from '@/types/payment'
 import { SearchHighlight } from '@/components/shared/SearchHighlight'
 import {
     Dialog,
@@ -23,7 +25,9 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog'
 import { toast } from 'sonner'
-import { cn } from '@/lib/utils'
+import { cn, formatCurrency } from '@/lib/utils'
+import { paymentService } from '@/services/payments'
+import { RecordPaymentDialog } from '@/components/payments/RecordPaymentDialog'
 
 export function CustomersPage() {
     const [searchQuery, setSearchQuery] = useState('')
@@ -32,6 +36,9 @@ export function CustomersPage() {
     const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
     const [deleteTarget, setDeleteTarget] = useState<{ id: number, name: string } | null>(null)
     const [selectedCustomerIds, setSelectedCustomerIds] = useState<number[]>([])
+    const [paymentDialogOpen, setPaymentDialogOpen] = useState(false)
+    const [paymentCustomerId, setPaymentCustomerId] = useState<number | null>(null)
+    const queryClient = useQueryClient()
     const debouncedSearch = useDebounce(searchQuery.trim(), 300)
 
     const {
@@ -48,10 +55,36 @@ export function CustomersPage() {
         () => customerPages?.pages.flatMap((page) => page.items) ?? [],
         [customerPages]
     )
+    const customerIds = useMemo(() => customers.map((c) => c.id), [customers])
+    const { data: debtMap, isFetching: isFetchingDebt } = useQuery({
+        queryKey: ['customer-debts', customerIds],
+        queryFn: async () => {
+            const entries = await Promise.all(
+                customerIds.map(async (id) => {
+                    try {
+                        const summary = await paymentService.getCustomerDebt(id)
+                        return [id, summary] as const
+                    } catch {
+                        return [id, null] as const
+                    }
+                })
+            )
+
+            return Object.fromEntries(entries) as Record<number, DebtSummary | null>
+        },
+        enabled: customerIds.length > 0
+    })
+    const customersWithDebt: (Customer & { debt_summary: DebtSummary | null })[] = useMemo(
+        () => customers.map((customer) => ({
+            ...customer,
+            debt_summary: debtMap?.[customer.id] ?? null
+        })),
+        [customers, debtMap]
+    )
     const totalCustomers = customerPages?.pages?.[0]?.total ?? 0
     const selectedCount = selectedCustomerIds.length
     const isSelectionMode = selectedCount > 0
-    const isEmpty = !isLoading && customers.length === 0
+    const isEmpty = !isLoading && customersWithDebt.length === 0
     const loadMoreRef = useInfiniteScroll({
         hasMore: Boolean(hasNextPage),
         isLoading: isFetchingNextPage,
@@ -61,11 +94,11 @@ export function CustomersPage() {
     useEffect(() => {
         setSelectedCustomerIds((prev) => {
             if (prev.length === 0) return prev
-            const visibleIds = new Set(customers.map((c) => c.id))
+            const visibleIds = new Set(customersWithDebt.map((c) => c.id))
             const next = prev.filter((id) => visibleIds.has(id))
             return next.length === prev.length ? prev : next
         })
-    }, [customers])
+    }, [customersWithDebt])
 
     const toggleCustomerSelection = (customerId: number) => {
         setSelectedCustomerIds((prev) =>
@@ -76,11 +109,11 @@ export function CustomersPage() {
     }
 
     const handleSelectAll = () => {
-        if (customers.length === 0) return
-        if (selectedCustomerIds.length === customers.length) {
+        if (customersWithDebt.length === 0) return
+        if (selectedCustomerIds.length === customersWithDebt.length) {
             setSelectedCustomerIds([])
         } else {
-            setSelectedCustomerIds(customers.map((customer) => customer.id))
+            setSelectedCustomerIds(customersWithDebt.map((customer) => customer.id))
         }
     }
 
@@ -138,7 +171,7 @@ export function CustomersPage() {
                 <Button onClick={() => setShowAddDialog(true)}>➕ Thêm mới</Button>
             </div>
 
-            {isLoading && customers.length === 0 ? (
+            {isLoading && customersWithDebt.length === 0 ? (
                 <div className="text-muted-foreground">Đang tải...</div>
             ) : isEmpty ? (
                 <div className="rounded-lg border-2 border-dashed p-12 text-center text-muted-foreground">
@@ -155,14 +188,14 @@ export function CustomersPage() {
                                 <p className="text-sm font-medium text-foreground">Chọn nhiều khách hàng</p>
                                 <p className="text-xs text-muted-foreground">
                                     {isSelectionMode
-                                        ? `Đã chọn ${selectedCount}/${customers.length} khách hàng`
+                                        ? `Đã chọn ${selectedCount}/${customersWithDebt.length} khách hàng`
                                         : 'Nhấn vào chấm tròn trên thẻ để chọn/bỏ chọn khách hàng'}
                                 </p>
                             </div>
                         </div>
                         <div className="ml-auto flex flex-wrap items-center gap-2">
                             <span className="text-xs text-muted-foreground">
-                                Hiển thị {customers.length}
+                                Hiển thị {customersWithDebt.length}
                                 {totalCustomers ? `/${totalCustomers}` : ''} khách hàng
                             </span>
                             <Button
@@ -170,9 +203,9 @@ export function CustomersPage() {
                                 variant="outline"
                                 size="sm"
                                 onClick={handleSelectAll}
-                                disabled={customers.length === 0}
+                                disabled={customersWithDebt.length === 0}
                             >
-                                {selectedCount === customers.length && customers.length > 0 ? 'Bỏ chọn tất cả' : 'Chọn tất cả'}
+                                {selectedCount === customersWithDebt.length && customersWithDebt.length > 0 ? 'Bỏ chọn tất cả' : 'Chọn tất cả'}
                             </Button>
                             {isSelectionMode && (
                                 <Button
@@ -189,10 +222,10 @@ export function CustomersPage() {
                     </div>
 
                     <p className="mb-4 text-sm text-muted-foreground">
-                        Tổng: {totalCustomers || customers.length} khách hàng • Đang hiển thị {customers.length}
+                        Tổng: {totalCustomers || customersWithDebt.length} khách hàng • Đang hiển thị {customersWithDebt.length}
                     </p>
                     <div className="grid gap-4 md:grid-cols-2">
-                        {customers.map((customer) => {
+                        {customersWithDebt.map((customer) => {
                             const isSelected = selectedCustomerIds.includes(customer.id)
                             return (
                                 <Card
@@ -258,6 +291,37 @@ export function CustomersPage() {
                                         </div>
                                     </CardHeader>
                                     <CardContent>
+                                        {customer.debt_summary?.total_debt ? (
+                                            <div className="mb-3 rounded-md bg-amber-50 px-3 py-2 border border-amber-200">
+                                                <p className="text-sm font-bold text-amber-900">
+                                                    Đang còn nợ: {formatCurrency(customer.debt_summary.total_debt)}
+                                                </p>
+                                                <p className="text-xs text-amber-700">
+                                                    {customer.debt_summary.total_invoices} hóa đơn chưa thanh toán đủ
+                                                </p>
+
+                                                {customer.debt_summary.overdue_invoices > 0 && (
+                                                    <p className="text-xs text-red-600 font-medium mt-1">
+                                                        Có {customer.debt_summary.overdue_invoices} hóa đơn quá hạn
+                                                    </p>
+                                                )}
+
+                                                <Button
+                                                    size="sm"
+                                                    className="mt-2 w-full"
+                                                    onClick={() => {
+                                                        setPaymentCustomerId(customer.id)
+                                                        setPaymentDialogOpen(true)
+                                                    }}
+                                                >
+                                                    Thu nợ
+                                                </Button>
+                                            </div>
+                                        ) : (
+                                            isFetchingDebt && (
+                                                <p className="mb-3 text-xs text-muted-foreground">Đang tải công nợ...</p>
+                                            )
+                                        )}
                                         {customer.address && (
                                             <p className="text-sm text-muted-foreground">📍 {customer.address}</p>
                                         )}
@@ -279,6 +343,21 @@ export function CustomersPage() {
                     )}
                 </>
             )}
+
+            <RecordPaymentDialog
+                open={paymentDialogOpen}
+                onOpenChange={(open) => {
+                    setPaymentDialogOpen(open)
+                    if (!open) {
+                        setPaymentCustomerId(null)
+                    }
+                }}
+                customerId={paymentCustomerId || 0}
+                onSuccess={() => {
+                    queryClient.invalidateQueries({ queryKey: ['customer-debts'] })
+                    queryClient.invalidateQueries({ queryKey: ['customers'] })
+                }}
+            />
 
             <AddCustomerDialog open={showAddDialog} onOpenChange={setShowAddDialog} />
             <EditCustomerDialog

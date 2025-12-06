@@ -171,9 +171,9 @@ async def update_invoice_status(
 async def generate_invoice_pdf(invoice_id: int, db: Session = Depends(get_db)):
     """
     Generate PDF for an invoice.
-    
-    Business rule: Only paid invoices can be exported to PDF.
-    Unpaid (pending) or cancelled invoices cannot be exported.
+
+    Business rule: Only pending or paid invoices can be exported to PDF.
+    Processing or cancelled invoices cannot be exported.
     """
     invoice_service = InvoiceService(db, Config.INVOICE_DIR)
     
@@ -181,11 +181,11 @@ async def generate_invoice_pdf(invoice_id: int, db: Session = Depends(get_db)):
     invoice = invoice_service.get_invoice(invoice_id)
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
-    
-    if invoice.status != 'paid':
+
+    if invoice.status not in ['pending', 'paid']:
         raise HTTPException(
-            status_code=400, 
-            detail="Chỉ có thể xuất hóa đơn đã thanh toán. Hóa đơn chưa thanh toán hoặc đã hủy không thể xuất."
+            status_code=400,
+            detail="Chỉ có thể xuất hóa đơn ở trạng thái chờ thanh toán hoặc đã thanh toán. Hóa đơn chờ xử lý hoặc đã hủy không thể xuất."
         )
     
     pdf_path = invoice_service.generate_pdf(invoice_id)
@@ -200,9 +200,9 @@ async def generate_invoice_pdf(invoice_id: int, db: Session = Depends(get_db)):
 async def generate_invoice_excel(invoice_id: int, db: Session = Depends(get_db)):
     """
     Generate Excel for an invoice.
-    
-    Business rule: Only paid invoices can be exported to Excel.
-    Unpaid (pending) or cancelled invoices cannot be exported.
+
+    Business rule: Only pending or paid invoices can be exported to Excel.
+    Processing or cancelled invoices cannot be exported.
     """
     invoice_service = InvoiceService(db, Config.INVOICE_DIR)
     
@@ -210,11 +210,11 @@ async def generate_invoice_excel(invoice_id: int, db: Session = Depends(get_db))
     invoice = invoice_service.get_invoice(invoice_id)
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
-    
-    if invoice.status != 'paid':
+
+    if invoice.status not in ['pending', 'paid']:
         raise HTTPException(
-            status_code=400, 
-            detail="Chỉ có thể xuất hóa đơn đã thanh toán. Hóa đơn chưa thanh toán hoặc đã hủy không thể xuất."
+            status_code=400,
+            detail="Chỉ có thể xuất hóa đơn ở trạng thái chờ thanh toán hoặc đã thanh toán. Hóa đơn chờ xử lý hoặc đã hủy không thể xuất."
         )
     
     excel_path = invoice_service.generate_excel(invoice_id)

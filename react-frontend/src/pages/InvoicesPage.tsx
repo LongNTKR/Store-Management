@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -12,6 +13,7 @@ import type { Invoice } from '@/types'
 import { InvoiceDetailsDialog } from '@/components/invoices/InvoiceDetailsDialog'
 import { SearchHighlight } from '@/components/shared/SearchHighlight'
 import { CreateInvoiceDialog } from '@/components/invoices/CreateInvoiceDialog'
+import { RecordPaymentDialog } from '@/components/payments/RecordPaymentDialog'
 
 const statusStyles: Record<Invoice['status'], string> = {
     pending: 'bg-amber-100 text-amber-800',
@@ -53,6 +55,9 @@ export function InvoicesPage() {
     const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null)
     const [detailsOpen, setDetailsOpen] = useState(false)
     const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null)
+    const queryClient = useQueryClient()
+    const [paymentDialogOpen, setPaymentDialogOpen] = useState(false)
+    const [paymentCustomerId, setPaymentCustomerId] = useState<number | null>(null)
 
     const filteredInvoices = useMemo(
         () => invoicePages?.pages.flatMap((page) => page.items) ?? [],
@@ -457,9 +462,30 @@ export function InvoicesPage() {
                                         <p className="text-sm text-muted-foreground">📍 {invoice.customer_address}</p>
                                     )}
                                 </div>
-                                <div className="text-right">
+                                <div className="text-right space-y-1">
                                     <p className="text-lg font-bold text-primary">{formatCurrency(invoice.total)}</p>
                                     <p className="text-sm text-muted-foreground">Tạm tính: {formatCurrency(invoice.subtotal)}</p>
+
+                                    {/* Payment status display */}
+                                    {invoice.paid_amount > 0 && (
+                                        <>
+                                            <p className="text-sm text-emerald-600">
+                                                Đã trả: {formatCurrency(invoice.paid_amount)}
+                                            </p>
+                                            {invoice.remaining_amount > 0 && (
+                                                <p className="text-sm font-semibold text-amber-600">
+                                                    Còn nợ: {formatCurrency(invoice.remaining_amount)}
+                                                </p>
+                                            )}
+                                        </>
+                                    )}
+
+                                    {/* Payment status badge */}
+                                    {invoice.payment_status === 'partial' && (
+                                        <span className="inline-block px-2 py-0.5 text-xs rounded-full bg-amber-100 text-amber-800 border border-amber-300">
+                                            Đã trả một phần
+                                        </span>
+                                    )}
                                 </div>
                                 <div className="flex gap-2">
                                     <Button
@@ -482,8 +508,8 @@ export function InvoicesPage() {
                                             e.stopPropagation()
                                             handleDownload(invoice.id, 'pdf')
                                         }}
-                                        disabled={invoice.status !== 'paid' || (!!downloading && downloading.id === invoice.id)}
-                                        title={invoice.status !== 'paid' ? 'Chỉ có thể xuất hóa đơn đã thanh toán' : ''}
+                                        disabled={!['pending', 'paid'].includes(invoice.status) || (!!downloading && downloading.id === invoice.id)}
+                                        title={!['pending', 'paid'].includes(invoice.status) ? 'Chỉ có thể xuất hóa đơn chờ thanh toán hoặc đã thanh toán' : ''}
                                     >
                                         {downloading?.id === invoice.id && downloading.type === 'pdf' ? (
                                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -492,6 +518,19 @@ export function InvoicesPage() {
                                         )}
                                         PDF
                                     </Button>
+                                    {invoice.remaining_amount > 0 && invoice.customer_id && (
+                                        <Button
+                                            variant="default"
+                                            size="sm"
+                                            onClick={(e) => {
+                                                e.stopPropagation()
+                                                setPaymentCustomerId(invoice.customer_id!)
+                                                setPaymentDialogOpen(true)
+                                            }}
+                                        >
+                                            Thu nợ
+                                        </Button>
+                                    )}
                                     <Button
                                         variant="outline"
                                         size="sm"
@@ -499,8 +538,8 @@ export function InvoicesPage() {
                                             e.stopPropagation()
                                             handleDownload(invoice.id, 'excel')
                                         }}
-                                        disabled={invoice.status !== 'paid' || (!!downloading && downloading.id === invoice.id)}
-                                        title={invoice.status !== 'paid' ? 'Chỉ có thể xuất hóa đơn đã thanh toán' : ''}
+                                        disabled={!['pending', 'paid'].includes(invoice.status) || (!!downloading && downloading.id === invoice.id)}
+                                        title={!['pending', 'paid'].includes(invoice.status) ? 'Chỉ có thể xuất hóa đơn chờ thanh toán hoặc đã thanh toán' : ''}
                                     >
                                         {downloading?.id === invoice.id && downloading.type === 'excel' ? (
                                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -540,6 +579,20 @@ export function InvoicesPage() {
                 invoice={selectedInvoice}
                 open={detailsOpen}
                 onOpenChange={setDetailsOpen}
+            />
+
+            <RecordPaymentDialog
+                open={paymentDialogOpen}
+                onOpenChange={(open) => {
+                    setPaymentDialogOpen(open)
+                    if (!open) {
+                        setPaymentCustomerId(null)
+                    }
+                }}
+                customerId={paymentCustomerId || 0}
+                onSuccess={() => {
+                    queryClient.invalidateQueries({ queryKey: ['invoices'] })
+                }}
             />
 
             <CreateInvoiceDialog

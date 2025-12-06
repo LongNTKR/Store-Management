@@ -112,6 +112,8 @@ class DatabaseManager:
             invoices_migrations = [
                 ('normalized_customer_name', 'TEXT'),
                 ('normalized_customer_phone', 'TEXT'),
+                ('paid_amount', 'FLOAT DEFAULT 0'),
+                ('remaining_amount', 'FLOAT'),
             ]
             for col_name, col_type in invoices_migrations:
                 if col_name not in invoices_columns:
@@ -120,6 +122,45 @@ class DatabaseManager:
                         print(f"✓ Added column: invoices.{col_name}")
                     except Exception as e:
                         print(f"⚠ Could not add invoices.{col_name}: {e}")
+
+            # Initialize remaining_amount for existing invoices
+            if 'remaining_amount' not in invoices_columns:
+                try:
+                    conn.execute(text("""
+                        UPDATE invoices
+                        SET remaining_amount = total - COALESCE(paid_amount, 0)
+                        WHERE remaining_amount IS NULL
+                    """))
+                    print("✓ Initialized remaining_amount for existing invoices")
+                except Exception as e:
+                    print(f"⚠ Could not initialize remaining_amount: {e}")
+
+            # Normalize legacy payment tracking values to avoid NULLs in responses
+            try:
+                conn.execute(text("""
+                    UPDATE invoices
+                    SET paid_amount = COALESCE(paid_amount, 0)
+                    WHERE paid_amount IS NULL
+                """))
+                conn.execute(text("""
+                    UPDATE invoices
+                    SET remaining_amount = total - COALESCE(paid_amount, 0)
+                    WHERE remaining_amount IS NULL
+                """))
+                print("Normalized invoice payment columns (paid_amount, remaining_amount)")
+            except Exception as e:
+                print(f"Warning: Could not normalize invoice payment columns: {e}")
+
+            # Create payment tables if they don't exist
+            if 'payments' not in inspector.get_table_names():
+                print("Creating payments table...")
+                Base.metadata.tables['payments'].create(bind=self.engine)
+                print("✓ Created payments table")
+
+            if 'payment_allocations' not in inspector.get_table_names():
+                print("Creating payment_allocations table...")
+                Base.metadata.tables['payment_allocations'].create(bind=self.engine)
+                print("✓ Created payment_allocations table")
 
             conn.commit()
 

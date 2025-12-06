@@ -71,6 +71,7 @@ export function CreateInvoiceDialog({
     const isSubmitting = isEditMode ? updateInvoiceMutation.isPending : createInvoiceMutation.isPending
     const prevOpenRef = useRef(open)
     const isMountedRef = useRef(true)
+    const searchDropdownRef = useRef<HTMLDivElement>(null)
 
     // Update customer info when selecting registered customer
     useEffect(() => {
@@ -297,6 +298,31 @@ export function CreateInvoiceDialog({
         }
     }, [])
 
+    // Close product search dropdown when clicking outside or pressing ESC
+    useEffect(() => {
+        if (!productSearchQuery) return // Only add listeners when dropdown is visible
+
+        const handleClickOutside = (event: MouseEvent) => {
+            if (searchDropdownRef.current && !searchDropdownRef.current.contains(event.target as Node)) {
+                setProductSearchQuery('')
+            }
+        }
+
+        const handleEsc = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                setProductSearchQuery('')
+            }
+        }
+
+        document.addEventListener('mousedown', handleClickOutside)
+        document.addEventListener('keydown', handleEsc)
+
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside)
+            document.removeEventListener('keydown', handleEsc)
+        }
+    }, [productSearchQuery])
+
     // Handle submit
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -307,8 +333,9 @@ export function CreateInvoiceDialog({
             return
         }
 
-        if (!customerName.trim()) {
-            alert('Vui lòng nhập tên khách hàng')
+        // Only require customer name for registered customers
+        if (customerType === 'registered' && !customerName.trim()) {
+            alert('Vui lòng chọn khách hàng từ danh sách')
             return
         }
 
@@ -412,14 +439,16 @@ export function CreateInvoiceDialog({
                                 ) : null}
 
                                 <div>
-                                    <Label htmlFor="customer-name">Tên khách hàng *</Label>
+                                    <Label htmlFor="customer-name">
+                                        Tên khách hàng {customerType === 'registered' && '*'}
+                                    </Label>
                                     <Input
                                         id="customer-name"
                                         value={customerName}
                                         onChange={(e) => setCustomerName(e.target.value)}
                                         placeholder="Nhập tên khách hàng"
                                         disabled={customerType === 'registered' && !!selectedCustomerId}
-                                        required
+                                        required={customerType === 'registered'}
                                     />
                                 </div>
 
@@ -540,7 +569,7 @@ export function CreateInvoiceDialog({
 
                         {/* Right column: search + cart */}
                         <div className="space-y-4">
-                            <div className="relative rounded-lg border bg-background p-4 shadow-sm space-y-3">
+                            <div ref={searchDropdownRef} className="relative rounded-lg border bg-background p-4 shadow-sm space-y-3">
                                 <div className="flex items-center justify-between">
                                     <div>
                                         <p className="text-sm font-medium">Tìm & thêm sản phẩm</p>

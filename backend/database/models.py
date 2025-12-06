@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import List
 from config import Config
 from sqlalchemy import (
-    Column, Integer, String, Float, DateTime, ForeignKey, Text, Boolean
+    Column, Integer, String, Float, DateTime, ForeignKey, Text, Boolean, Index
 )
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
@@ -140,9 +140,22 @@ class Customer(Base):
 
     # Relationships
     invoices = relationship('Invoice', back_populates='customer', order_by='Invoice.created_at.desc()')
+    payments = relationship('Payment', back_populates='customer', order_by='Payment.payment_date.desc()')
 
     def __repr__(self):
         return f"<Customer(id={self.id}, name='{self.name}', phone='{self.phone}')>"
+
+    def get_total_debt(self, db_session) -> float:
+        """Calculate total outstanding debt (computed on-the-fly, not stored)."""
+        from sqlalchemy import func
+        result = db_session.query(
+            func.sum(Invoice.remaining_amount)
+        ).filter(
+            Invoice.customer_id == self.id,
+            Invoice.status.in_(['pending', 'paid']),
+            Invoice.remaining_amount > 0
+        ).scalar()
+        return float(result or 0)
 
 
 class Invoice(Base):
@@ -167,6 +180,10 @@ class Invoice(Base):
     tax = Column(Float, default=0)  # Tax amount or percentage
     total = Column(Float, nullable=False)
 
+    # Payment tracking
+    paid_amount = Column(Float, default=0, nullable=False)  # Total amount paid
+    remaining_amount = Column(Float, nullable=False)  # total - paid_amount
+
     # Status
     status = Column(String(50), default='pending', index=True)  # pending, paid, cancelled
     payment_method = Column(String(50), nullable=True)  # cash, transfer, card
@@ -181,9 +198,34 @@ class Invoice(Base):
     # Relationships
     customer = relationship('Customer', back_populates='invoices')
     items = relationship('InvoiceItem', back_populates='invoice', cascade='all, delete-orphan')
+    payment_allocations = relationship(
+        'PaymentAllocation',
+        back_populates='invoice',
+        order_by='PaymentAllocation.allocation_date.desc()'
+    )
 
     def __repr__(self):
         return f"<Invoice(id={self.id}, number='{self.invoice_number}', total={self.total})>"
+
+    @property
+    def payment_status(self) -> str:
+        """Return payment status: 'unpaid', 'partial', 'paid'."""
+        if self.paid_amount == 0:
+            return 'unpaid'
+        elif self.remaining_amount <= 0.01:  # Float tolerance
+            return 'paid'
+        else:
+            return 'partial'
+
+    @property
+    def is_fully_paid(self) -> bool:
+        """Check if invoice is fully paid."""
+        return self.remaining_amount <= 0.01  # Float tolerance
+
+    @property
+    def is_partially_paid(self) -> bool:
+        """Check if invoice has partial payment."""
+        return self.paid_amount > 0 and self.remaining_amount > 0.01
 
 
 class InvoiceItem(Base):
@@ -266,3 +308,63 @@ class MasterPassword(Base):
 
     def __repr__(self):
         return f"<MasterPassword(id={self.id})>"
+
+
+class Payment(Base):
+    """Payment model - tracks customer payment transactions."""
+
+    __tablename__ = 'payments'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    payment_number = Column(String(50), unique=True, nullable=False, index=True)  # PAY-YYYYMMDD-XXXX
+    customer_id = Column(Integer, ForeignKey('customers.id'), nullable=False, index=True)
+
+    # Financial
+    amount = Column(Float, nullable=False)  # Total payment amount
+    payment_method = Column(String(50), nullable=False)  # cash, transfer, card
+
+    # Metadata
+    payment_date = Column(DateTime, default=get_vn_time, index=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=get_vn_time)
+    updated_at = Column(DateTime, default=get_vn_time, onupdate=get_vn_time)
+    created_by = Column(String(100), nullable=True)  # Username/staff who recorded payment
+
+    # Relationships
+    customer = relationship('Customer', back_populates='payments')
+    allocations = relationship('PaymentAllocation', back_populates='payment', cascade='all, delete-orphan')
+
+    # Indexes for performance
+    __table_args__ = (
+        Index('idx_payment_customer_date', 'customer_id', 'payment_date'),
+    )
+
+    def __repr__(self):
+        return f"<Payment(id={self.id}, number='{self.payment_number}', amount={self.amount})>"
+
+
+class PaymentAllocation(Base):
+    """Payment allocation model - tracks how payments are distributed to invoices."""
+
+    __tablename__ = 'payment_allocations'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    payment_id = Column(Integer, ForeignKey('payments.id'), nullable=False, index=True)
+    invoice_id = Column(Integer, ForeignKey('invoices.id'), nullable=False, index=True)
+
+    # Allocation details
+    amount = Column(Float, nullable=False)  # Amount allocated to this invoice
+    allocation_date = Column(DateTime, default=get_vn_time)
+    notes = Column(Text, nullable=True)
+
+    # Relationships
+    payment = relationship('Payment', back_populates='allocations')
+    invoice = relationship('Invoice', back_populates='payment_allocations')
+
+    # Indexes for performance
+    __table_args__ = (
+        Index('idx_payment_invoice', 'payment_id', 'invoice_id'),
+    )
+
+    def __repr__(self):
+        return f"<PaymentAllocation(id={self.id}, payment_id={self.payment_id}, invoice_id={self.invoice_id}, amount={self.amount})>"

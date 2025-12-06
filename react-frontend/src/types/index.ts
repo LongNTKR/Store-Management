@@ -108,6 +108,11 @@ export interface Invoice {
     discount: number
     tax: number
     total: number
+    // Payment tracking
+    paid_amount: number
+    remaining_amount: number
+    payment_status?: 'unpaid' | 'partial' | 'paid'
+    // Status
     status: 'pending' | 'paid' | 'cancelled' | 'processing'
     payment_method?: string
     notes?: string
@@ -135,6 +140,9 @@ export interface Statistics {
     cancelled_invoices: number
     pending_revenue: number
     average_order_value: number
+    // Debt tracking
+    total_debt: number
+    invoices_with_debt: number
 }
 
 export interface CustomerStats {

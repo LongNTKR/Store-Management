@@ -90,6 +90,11 @@ class Invoice(BaseModel):
     discount: float = 0
     tax: float = 0
     total: float
+    # Payment tracking
+    paid_amount: float = 0
+    remaining_amount: float
+    payment_status: Optional[str] = None  # 'unpaid', 'partial', 'paid' (computed from model)
+    # Status
     status: str = "pending"
     payment_method: Optional[str] = None
     notes: Optional[str] = None
@@ -109,3 +114,6 @@ class Statistics(BaseModel):
     cancelled_invoices: int
     pending_revenue: float
     average_order_value: float
+    # Debt tracking
+    total_debt: float = 0
+    invoices_with_debt: int = 0
