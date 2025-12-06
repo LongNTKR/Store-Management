@@ -83,6 +83,8 @@ class PaymentResponse(BaseModel):
                 payment_id=alloc.payment_id,
                 invoice_id=alloc.invoice_id,
                 invoice_number=alloc.invoice.invoice_number if alloc.invoice else "",
+                payment_number=payment.payment_number,
+                payment_method=payment.payment_method,
                 amount=alloc.amount,
                 allocation_date=alloc.allocation_date,
                 notes=alloc.notes
