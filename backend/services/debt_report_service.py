@@ -35,7 +35,7 @@ def get_vn_time():
     return datetime.now(VN_TZ)
 
 # Font setup for Vietnamese PDF
-FONT_DIR = os.path.join(os.path.dirname(__file__), '..', 'fonts')
+FONT_DIR = os.path.join(os.path.dirname(__file__), 'fonts')
 FONT_NORMAL = 'DejaVuSans'
 FONT_BOLD = 'DejaVuSans-Bold'
 

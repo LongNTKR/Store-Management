@@ -248,14 +248,37 @@ async def get_invoice_payments(
 
     result = []
     for alloc in allocations:
+        # 1. Add the original allocation
         result.append(PaymentAllocationResponse(
             id=alloc.id,
             payment_id=alloc.payment_id,
             invoice_id=alloc.invoice_id,
             invoice_number=alloc.invoice.invoice_number if alloc.invoice else "",
+            payment_number=alloc.payment.payment_number if alloc.payment else "",
+            payment_method=alloc.payment.payment_method if alloc.payment else None,
             amount=alloc.amount,
             allocation_date=alloc.allocation_date,
             notes=alloc.notes
         ))
+
+        # 2. Check if payment is reversed and add "Refund" allocation
+        if alloc.payment and alloc.payment.notes and "[ĐÃ HỦY]" in alloc.payment.notes:
+            # Create a synthetic refund entry
+            # Use negative ID to avoid collision (though untyped in frontend usually fine)
+            # Use payment.updated_at as the refund date
+            result.append(PaymentAllocationResponse(
+                id=-alloc.id, 
+                payment_id=alloc.payment_id,
+                invoice_id=alloc.invoice_id,
+                invoice_number=alloc.invoice.invoice_number if alloc.invoice else "",
+                payment_number=alloc.payment.payment_number,
+                payment_method=alloc.payment.payment_method,
+                amount=-alloc.amount,
+                allocation_date=alloc.payment.updated_at or alloc.allocation_date,
+                notes=f"Hoàn trả: {alloc.payment.notes.split('[ĐÃ HỦY]')[1].strip()}" if len(alloc.payment.notes.split('[ĐÃ HỦY]')) > 1 else "Hoàn trả thanh toán"
+            ))
+
+    # Sort all by date descending
+    result.sort(key=lambda x: x.allocation_date, reverse=True)
 
     return result

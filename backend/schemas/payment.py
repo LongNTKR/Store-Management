@@ -11,6 +11,8 @@ class PaymentAllocationResponse(BaseModel):
     payment_id: int
     invoice_id: int
     invoice_number: str  # Denormalized for convenience
+    payment_number: str  # Added for invoice details view
+    payment_method: Optional[str] = None  # Added for invoice details view
     amount: float
     allocation_date: datetime
     notes: Optional[str] = None

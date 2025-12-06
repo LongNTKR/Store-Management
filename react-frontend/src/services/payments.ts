@@ -1,5 +1,5 @@
 import api from './api'
-import type { Payment, PaymentCreate, DebtSummary } from '../types/payment'
+import type { Payment, PaymentCreate, DebtSummary, PaymentAllocation } from '../types/payment'
 
 export const paymentService = {
   /**
@@ -52,7 +52,7 @@ export const paymentService = {
   /**
    * Get payment allocations for an invoice
    */
-  getInvoicePayments: async (invoiceId: number) => {
+  getInvoicePayments: async (invoiceId: number): Promise<PaymentAllocation[]> => {
     const response = await api.get(`/api/invoices/${invoiceId}/payments`)
     return response.data
   }
