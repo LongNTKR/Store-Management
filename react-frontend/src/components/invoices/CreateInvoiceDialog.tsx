@@ -56,6 +56,7 @@ export function CreateInvoiceDialog({
     const [paymentMethod, setPaymentMethod] = useState<string>('')
     const [status, setStatus] = useState<'pending' | 'paid'>('pending')
     const [notes, setNotes] = useState('')
+    const [validationError, setValidationError] = useState<string | null>(null)
     const isEditMode = mode === 'edit' && !!invoiceToEdit
 
     // Hooks
@@ -185,17 +186,16 @@ export function CreateInvoiceDialog({
 
     // Update quantity
     const updateQuantity = (productId: number, quantity: number) => {
-        if (quantity <= 0) {
-            removeProduct(productId)
-        } else {
-            setLineItems(items =>
-                items.map(item =>
-                    item.product.id === productId
-                        ? { ...item, quantity }
-                        : item
-                )
+        // Enforce non-negative quantity
+        const validQuantity = Math.max(0, quantity)
+
+        setLineItems(items =>
+            items.map(item =>
+                item.product.id === productId
+                    ? { ...item, quantity: validQuantity }
+                    : item
             )
-        }
+        )
     }
 
     // Remove product
@@ -329,13 +329,20 @@ export function CreateInvoiceDialog({
 
         // Validation
         if (lineItems.length === 0) {
-            alert('Vui lòng thêm ít nhất một sản phẩm')
+            setValidationError('Vui lòng thêm ít nhất một sản phẩm')
+            return
+        }
+
+        // Check for 0 quantity
+        const invalidItems = lineItems.filter(item => item.quantity <= 0)
+        if (invalidItems.length > 0) {
+            setValidationError(`Sản phẩm "${invalidItems[0].product.name}" có số lượng không hợp lệ (phải lớn hơn 0)`)
             return
         }
 
         // Only require customer name for registered customers
         if (customerType === 'registered' && !customerName.trim()) {
-            alert('Vui lòng chọn khách hàng từ danh sách')
+            setValidationError('Vui lòng chọn khách hàng từ danh sách')
             return
         }
 
@@ -670,7 +677,13 @@ export function CreateInvoiceDialog({
                                 {lineItems.length > 0 ? (
                                     <div className="space-y-3 max-h-[340px] overflow-y-auto pr-1">
                                         {lineItems.map(item => (
-                                            <div key={item.product.id} className="rounded-lg border bg-background p-3 shadow-sm">
+                                            <div
+                                                key={item.product.id}
+                                                className={`rounded-lg border p-3 shadow-sm ${item.quantity <= 0
+                                                    ? 'bg-destructive/10 border-destructive'
+                                                    : 'bg-background'
+                                                    }`}
+                                            >
                                                 <div className="flex items-start justify-between gap-3">
                                                     <div>
                                                         <p className="text-sm font-medium leading-tight">{item.product.name}</p>
@@ -692,8 +705,8 @@ export function CreateInvoiceDialog({
                                                     <div className="flex flex-col items-center gap-1">
                                                         <Input
                                                             type="number"
-                                                            min={item.product.unit.allows_decimal ? "0.01" : "1"}
-                                                            step={item.product.unit.step_size}
+                                                            min={item.product.unit.allows_decimal ? "0" : "1"}
+                                                            step={item.product.unit.allows_decimal ? "any" : item.product.unit.step_size}
                                                             value={item.quantity}
                                                             onChange={(e) => updateQuantity(item.product.id, parseFloat(e.target.value) || 0)}
                                                             className="w-24 text-center"
@@ -741,6 +754,25 @@ export function CreateInvoiceDialog({
                     </DialogFooter>
                 </form>
             </DialogContent>
+
+            {/* Validation Alert Dialog */}
+            <Dialog open={!!validationError} onOpenChange={(open) => !open && setValidationError(null)}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle className="text-center text-destructive">Thông báo</DialogTitle>
+                    </DialogHeader>
+                    <div className="flex flex-col items-center justify-center py-4 text-center">
+                        <p className="text-sm text-foreground">
+                            {validationError}
+                        </p>
+                    </div>
+                    <DialogFooter className="sm:justify-center">
+                        <Button type="button" variant="default" onClick={() => setValidationError(null)}>
+                            Đã hiểu
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </Dialog>
     )
 }

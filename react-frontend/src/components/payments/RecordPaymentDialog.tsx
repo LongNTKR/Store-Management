@@ -71,7 +71,7 @@ export function RecordPaymentDialog({
     [manualAllocations]
   )
 
-  const overAllocated = mode === 'manual' && parsedAmount > 0 && totalManual > parsedAmount
+  const isAllocationMatch = mode === 'manual' && parsedAmount > 0 ? Math.abs(totalManual - parsedAmount) < 1 : true
 
   const recordPaymentMutation = useMutation({
     mutationFn: (data: PaymentCreate) => paymentService.recordPayment(data),
@@ -101,18 +101,18 @@ export function RecordPaymentDialog({
       return
     }
 
-    if (mode === 'manual' && overAllocated) {
-      toast.error('Tổng phân bổ vượt quá số tiền thanh toán')
+    if (mode === 'manual' && !isAllocationMatch) {
+      toast.error('Tổng phân bổ không khớp với số tiền thanh toán')
       return
     }
 
     const cleanedManualAllocations =
       mode === 'manual'
         ? Object.fromEntries(
-            Object.entries(manualAllocations)
-              .map(([invoiceId, value]) => [Number(invoiceId), value || 0])
-              .filter(([, value]) => value > 0)
-          )
+          Object.entries(manualAllocations)
+            .map(([invoiceId, value]) => [Number(invoiceId), value || 0])
+            .filter(([, value]) => value > 0)
+        )
         : undefined
 
     const payload: PaymentCreate = {
@@ -135,7 +135,7 @@ export function RecordPaymentDialog({
     parsedAmount <= 0 ||
     recordPaymentMutation.isPending ||
     outstandingInvoices.length === 0 ||
-    overAllocated
+    (mode === 'manual' && !isAllocationMatch)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -178,7 +178,17 @@ export function RecordPaymentDialog({
                   <Input
                     type="number"
                     value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value)
+                      if (isNaN(val)) {
+                        setAmount(e.target.value)
+                        return
+                      }
+
+                      const maxDebt = debtSummary?.total_debt || 0
+                      const clampedVal = Math.min(Math.max(0, val), maxDebt)
+                      setAmount(clampedVal.toString())
+                    }}
                     placeholder="Nhập số tiền"
                     min="0"
                   />
@@ -245,10 +255,16 @@ export function RecordPaymentDialog({
                           className="w-32"
                           value={manualAllocations[invoice.id] ?? ''}
                           onChange={(e) => {
-                            const val = parseFloat(e.target.value) || 0
+                            let val = parseFloat(e.target.value)
+                            if (isNaN(val)) val = 0
+
+                            const maxRowDebt = invoice.remaining_amount || 0
+                            // Clamp value between 0 and remaining debt
+                            const clampedVal = Math.min(Math.max(0, val), maxRowDebt)
+
                             setManualAllocations((prev) => ({
                               ...prev,
-                              [invoice.id]: val
+                              [invoice.id]: clampedVal
                             }))
                           }}
                           placeholder="0"
@@ -257,12 +273,18 @@ export function RecordPaymentDialog({
                       </div>
                     ))}
 
-                    {overAllocated && (
-                      <p className="text-sm text-red-600">
-                        Tổng phân bổ ({formatCurrency(totalManual)}) lớn hơn số tiền thanh toán ({formatCurrency(parsedAmount)}).
-                      </p>
-                    )}
                   </TabsContent>
+
+                  {mode === 'manual' && parsedAmount > 0 && !isAllocationMatch && (
+                    <div className="mt-2 p-2 bg-red-50 text-red-600 text-sm rounded border border-red-200">
+                      Tổng phân bổ: <strong>{formatCurrency(totalManual)}</strong>
+                      <br />
+                      {totalManual > parsedAmount
+                        ? `Đang vượt quá: ${formatCurrency(totalManual - parsedAmount)}`
+                        : `Còn thiếu: ${formatCurrency(parsedAmount - totalManual)}`
+                      }
+                    </div>
+                  )}
                 </Tabs>
 
                 <div className="flex justify-end gap-2">

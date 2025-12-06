@@ -348,6 +348,13 @@ class InvoiceService:
         # Generate invoice number
         invoice_number = self.generate_invoice_number()
 
+        # Calculate initial payment status
+        paid_amount = 0
+        if status == 'paid':
+            paid_amount = total
+        
+        remaining_amount = max(0, total - paid_amount)
+
         # Create invoice
         invoice = Invoice(
             invoice_number=invoice_number,
@@ -361,6 +368,8 @@ class InvoiceService:
             discount=discount,
             tax=tax,
             total=total,
+            paid_amount=paid_amount,
+            remaining_amount=remaining_amount,
             status=status,
             payment_method=payment_method,
             notes=notes
@@ -472,11 +481,14 @@ class InvoiceService:
 
         total = subtotal - discount + tax
 
+        # Recalculate remaining amount based on new total and existing paid amount
+        invoice.remaining_amount = max(0, total - invoice.paid_amount)
+        
         invoice.customer_id = customer_id
         invoice.customer_name = customer_name
         invoice.normalized_customer_name = normalize_vietnamese(customer_name) if customer_name else None
         invoice.customer_phone = customer_phone
-        invoice.normalized_customer_phone = normalize_phone(customer_phone) if customer_phone else None
+        invoice.normalized_customer_phone= normalize_phone(customer_phone) if customer_phone else None
         invoice.customer_address = customer_address
         invoice.subtotal = subtotal
         invoice.discount = discount
@@ -681,6 +693,33 @@ class InvoiceService:
             )
         if invoice.status == 'processing':
             raise ValueError("Không thể cập nhật trạng thái của hóa đơn đang chờ xử lý. Vui lòng hoàn tất hóa đơn trước.")
+
+        # If status is being changed to 'paid', we need to settle the debt
+        if status == 'paid' and invoice.remaining_amount > 0.01:
+            try:
+                # If invoice has a customer, create a payment record
+                if invoice.customer_id:
+                    from services.payment_service import PaymentService
+                    payment_service = PaymentService(self.db, self.output_dir)
+                    
+                    payment_service.record_payment(
+                        customer_id=invoice.customer_id,
+                        amount=invoice.remaining_amount,
+                        payment_method=invoice.payment_method or 'cash',
+                        invoice_ids=[invoice.id],
+                        notes="Tự động thanh toán khi cập nhật trạng thái hóa đơn"
+                    )
+                    # record_payment will update the invoice amounts and status logic
+                    # We reload the invoice to get updated values
+                    self.db.refresh(invoice)
+                    return invoice
+                else:
+                    # Walk-in customer (no customer_id): Just update amounts manually
+                    # Since we can't create a Payment record without a customer_id
+                    invoice.paid_amount = invoice.total
+                    invoice.remaining_amount = 0
+            except Exception as e:
+                raise ValueError(f"Lỗi khi tự động thanh toán: {str(e)}")
 
         invoice.status = status
         invoice.updated_at = get_vn_time()
