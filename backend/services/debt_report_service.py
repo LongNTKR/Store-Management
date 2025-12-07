@@ -11,7 +11,7 @@ from config import Config
 
 # ReportLab imports for PDF
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4
+from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.platypus import (
@@ -178,24 +178,16 @@ class DebtReportService:
         if company_name is None:
             company_name = Config.COMPANY_NAME
 
-        # Get all invoices with debt
+        # Get ALL invoices for customer (paid, unpaid, cancelled)
         invoices = self.db.query(Invoice).filter(
-            Invoice.customer_id == customer_id,
-            Invoice.status.in_(['processing', 'pending', 'paid']),
-            Invoice.remaining_amount > 0
-        ).order_by(Invoice.created_at.asc()).all()
+            Invoice.customer_id == customer_id
+        ).order_by(Invoice.created_at.desc()).all()  # Most recent first
 
-        # Get payment history
-        payments = self.db.query(Payment).filter(
-            Payment.customer_id == customer_id
-        ).order_by(Payment.payment_date.desc()).limit(20).all()
-
-        # Calculate totals
-        total_debt = sum(inv.remaining_amount for inv in invoices)
+        # Calculate totals (now includes all invoices, not just unpaid)
+        # Exclude cancelled invoices from debt calculations
+        total_debt = sum(inv.remaining_amount for inv in invoices if inv.remaining_amount > 0 and inv.status != 'cancelled')
         total_invoices = len(invoices)
-
-        # Calculate aging
-        aging_buckets = self.calculate_aging_buckets(invoices)
+        total_unpaid = len([inv for inv in invoices if inv.remaining_amount > 0 and inv.status != 'cancelled'])
 
         # Create PDF filename
         now = get_vn_time()
@@ -203,7 +195,7 @@ class DebtReportService:
         pdf_path = os.path.join(self.output_dir, pdf_filename)
 
         # Create PDF
-        doc = SimpleDocTemplate(pdf_path, pagesize=A4, topMargin=20*mm, bottomMargin=20*mm)
+        doc = SimpleDocTemplate(pdf_path, pagesize=landscape(A4), topMargin=20*mm, bottomMargin=20*mm, leftMargin=15*mm, rightMargin=15*mm)
         elements = []
         styles = getSampleStyleSheet()
 
@@ -259,11 +251,12 @@ class DebtReportService:
         elements.append(Paragraph("<b>TỔNG QUAN CÔNG NỢ</b>", summary_style))
 
         summary_data = [
-            ['Tổng số hóa đơn chưa thanh toán đủ:', str(total_invoices)],
+            ['Tổng số hóa đơn:', str(total_invoices)],
+            ['Số hóa đơn chưa thanh toán đủ:', str(total_unpaid)],
             ['Tổng công nợ:', f"{total_debt:,.0f} VNĐ"]
         ]
 
-        summary_table = Table(summary_data, colWidths=[350, 150])
+        summary_table = Table(summary_data, colWidths=[250, 150], hAlign='LEFT')
         summary_table.setStyle(TableStyle([
             ('FONTNAME', (0, 0), (-1, -1), FONT_NORMAL),
             ('FONTSIZE', (0, 0), (-1, -1), 11),
@@ -277,98 +270,111 @@ class DebtReportService:
         elements.append(summary_table)
         elements.append(Spacer(1, 20))
 
-        # Aging analysis section
-        elements.append(Paragraph("<b>PHÂN TÍCH TUỔI NỢ</b>", summary_style))
-
-        aging_table_data = [['Độ tuổi nợ', 'Số hóa đơn', 'Tổng tiền (VNĐ)']]
-        for bucket in aging_buckets:
-            aging_table_data.append([
-                bucket['bucket_label'],
-                str(bucket['invoice_count']),
-                f"{bucket['total_amount']:,.0f}"
-            ])
-
-        aging_table = Table(aging_table_data, colWidths=[200, 150, 150])
-        aging_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3498DB')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('FONTNAME', (0, 0), (-1, 0), FONT_BOLD),
-            ('FONTSIZE', (0, 0), (-1, 0), 11),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 1), (-1, -1), FONT_NORMAL),
-            ('FONTSIZE', (0, 1), (-1, -1), 10),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
-            ('TOPPADDING', (0, 0), (-1, -1), 8),
-        ]))
-        elements.append(aging_table)
-        elements.append(Spacer(1, 20))
-
         # Invoice list section
-        elements.append(Paragraph("<b>CHI TIẾT HÓA ĐƠN CHƯA THANH TOÁN ĐỦ</b>", summary_style))
+        elements.append(Paragraph("<b>CHI TIẾT HÓA ĐƠN</b>", summary_style))
 
-        invoice_table_data = [['STT', 'Số hóa đơn', 'Ngày', 'Tổng tiền', 'Đã trả', 'Còn lại']]
+        # Create styles for columns that need wrapping (Đã trả, Còn lại, Trạng thái, Ghi chú)
+        cell_style_center = ParagraphStyle(
+            'CellCenter',
+            parent=styles['Normal'],
+            fontName=FONT_NORMAL,
+            fontSize=8,
+            leading=10,
+            alignment=TA_CENTER
+        )
+
+        cell_style_right = ParagraphStyle(
+            'CellRight',
+            parent=styles['Normal'],
+            fontName=FONT_NORMAL,
+            fontSize=8,
+            leading=10,
+            alignment=TA_RIGHT
+        )
+
+        cell_style_left = ParagraphStyle(
+            'CellLeft',
+            parent=styles['Normal'],
+            fontName=FONT_NORMAL,
+            fontSize=8,
+            leading=10,
+            alignment=TA_LEFT
+        )
+
+        # Status translation map
+        status_map = {
+            'pending': 'Chưa thanh toán',
+            'paid': 'Đã thanh toán',
+            'processing': 'Đang xử lý',
+            'cancelled': 'Đã hủy'
+        }
+
+        # 8 columns now including Trạng thái
+        invoice_table_data = [['STT', 'Số hóa đơn', 'Ngày', 'Tổng tiền', 'Đã trả', 'Còn lại', 'Trạng thái', 'Ghi chú']]
+
         for idx, invoice in enumerate(invoices, 1):
+            # First 4 columns: Plain strings (NO wrapping - single line only)
+            stt_str = str(idx)
+            invoice_num_str = invoice.invoice_number or ''
+            datetime_str = invoice.created_at.strftime('%d/%m/%Y %H:%M')
+            total_str = f"{invoice.total:,.0f} VNĐ"
+
+            # Last 4 columns: Paragraph objects (WITH wrapping capability)
+            paid_para = Paragraph(f"{invoice.paid_amount:,.0f} VNĐ", cell_style_right)
+            remaining_para = Paragraph(f"{invoice.remaining_amount:,.0f} VNĐ", cell_style_right)
+
+            status_text = status_map.get(invoice.status, invoice.status or '')
+            status_para = Paragraph(status_text, cell_style_center)
+
+            notes_text = invoice.notes or ''
+            notes_para = Paragraph(notes_text, cell_style_left)
+
             invoice_table_data.append([
-                str(idx),
-                invoice.invoice_number,
-                invoice.created_at.strftime('%d/%m/%Y'),
-                f"{invoice.total:,.0f}",
-                f"{invoice.paid_amount:,.0f}",
-                f"{invoice.remaining_amount:,.0f}"
+                stt_str,           # STT - plain string
+                invoice_num_str,   # Số hóa đơn - plain string
+                datetime_str,      # Ngày - plain string
+                total_str,         # Tổng tiền - plain string
+                paid_para,         # Đã trả - Paragraph (wrappable)
+                remaining_para,    # Còn lại - Paragraph (wrappable)
+                status_para,       # Trạng thái - Paragraph (wrappable)
+                notes_para         # Ghi chú - Paragraph (wrappable)
             ])
 
-        invoice_table = Table(invoice_table_data, colWidths=[30, 90, 65, 80, 80, 80])
+        # 8 columns, adjusted widths for A4 Landscape (~842pt width total, ~85pt margins L/R -> ~730pt usable)
+        # Weights: STT:30, Số HĐ:90, Ngày:80, Tổng:80, Trả:80, Còn:80, Trạng thái:90, Ghi chú:200
+        invoice_table = Table(invoice_table_data, colWidths=[30, 90, 80, 80, 80, 80, 90, 200])
+
+        # Updated table style for mixed string/Paragraph cells
         invoice_table.setStyle(TableStyle([
+            # Header row
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3498DB')),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
             ('FONTNAME', (0, 0), (-1, 0), FONT_BOLD),
-            ('FONTSIZE', (0, 0), (-1, 0), 9),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTSIZE', (0, 0), (-1, 0), 8),
+            ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+
+            # Data rows - Font styling
             ('FONTNAME', (0, 1), (-1, -1), FONT_NORMAL),
             ('FONTSIZE', (0, 1), (-1, -1), 8),
             ('GRID', (0, 0), (-1, -1), 1, colors.black),
-            ('ALIGN', (3, 1), (-1, -1), 'RIGHT'),
+
+            # Alignment for plain string columns (columns 0-3: STT, Số HĐ, Ngày, Tổng tiền)
+            ('ALIGN', (0, 1), (2, -1), 'CENTER'),  # STT, Số HĐ, Ngày - center
+            ('ALIGN', (3, 1), (3, -1), 'RIGHT'),   # Tổng tiền - right
+
+            # Note: Columns 4-7 use Paragraph which handles alignment internally via styles
+
+            # Vertical alignment for all cells
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+
+            # Padding
             ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
             ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('LEFTPADDING', (0, 0), (-1, -1), 3),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 3),
         ]))
         elements.append(invoice_table)
         elements.append(Spacer(1, 20))
-
-        # Payment history section (recent 20 payments)
-        if payments:
-            elements.append(Paragraph("<b>LỊCH SỬ THANH TOÁN GẦN ĐÂY</b>", summary_style))
-
-            payment_table_data = [['STT', 'Mã thanh toán', 'Ngày', 'Số tiền', 'Phương thức']]
-            for idx, payment in enumerate(payments, 1):
-                payment_method_map = {
-                    'cash': 'Tiền mặt',
-                    'transfer': 'Chuyển khoản',
-                    'card': 'Thẻ'
-                }
-                payment_table_data.append([
-                    str(idx),
-                    payment.payment_number,
-                    payment.payment_date.strftime('%d/%m/%Y'),
-                    f"{payment.amount:,.0f}",
-                    payment_method_map.get(payment.payment_method, payment.payment_method or '')
-                ])
-
-            payment_table = Table(payment_table_data, colWidths=[30, 100, 80, 90, 100])
-            payment_table.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3498DB')),
-                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-                ('FONTNAME', (0, 0), (-1, 0), FONT_BOLD),
-                ('FONTSIZE', (0, 0), (-1, 0), 9),
-                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-                ('FONTNAME', (0, 1), (-1, -1), FONT_NORMAL),
-                ('FONTSIZE', (0, 1), (-1, -1), 8),
-                ('GRID', (0, 0), (-1, -1), 1, colors.black),
-                ('ALIGN', (3, 1), (3, -1), 'RIGHT'),
-                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
-                ('TOPPADDING', (0, 0), (-1, -1), 6),
-            ]))
-            elements.append(payment_table)
 
         # Footer note
         elements.append(Spacer(1, 30))
@@ -411,18 +417,10 @@ class DebtReportService:
         if not customer:
             raise ValueError(f"Không tìm thấy khách hàng với ID {customer_id}")
 
-        # Get data
+        # Get ALL invoices for customer (paid, unpaid, cancelled)
         invoices = self.db.query(Invoice).filter(
-            Invoice.customer_id == customer_id,
-            Invoice.status.in_(['processing', 'pending', 'paid']),
-            Invoice.remaining_amount > 0
-        ).order_by(Invoice.created_at.asc()).all()
-
-        payments = self.db.query(Payment).filter(
-            Payment.customer_id == customer_id
-        ).order_by(Payment.payment_date.desc()).all()
-
-        aging_buckets = self.calculate_aging_buckets(invoices)
+            Invoice.customer_id == customer_id
+        ).order_by(Invoice.created_at.desc()).all()  # Most recent first
 
         # Create Excel file
         now = get_vn_time()
@@ -455,49 +453,33 @@ class DebtReportService:
         ws_summary['A6'] = f"Số điện thoại: {customer.phone or 'N/A'}"
         ws_summary['A7'] = f"Địa chỉ: {customer.address or 'N/A'}"
 
-        total_debt = sum(inv.remaining_amount for inv in invoices)
+        total_debt = sum(inv.remaining_amount for inv in invoices if inv.remaining_amount > 0)
+        total_unpaid = len([inv for inv in invoices if inv.remaining_amount > 0])
+
         ws_summary['A9'] = "Tổng công nợ:"
         ws_summary['A9'].font = Font(bold=True, size=12)
         ws_summary['B9'] = total_debt
         ws_summary['B9'].number_format = '#,##0 "VNĐ"'
         ws_summary['B9'].font = Font(bold=True, size=12, color="E74C3C")
 
-        ws_summary['A10'] = "Số hóa đơn chưa thanh toán đủ:"
+        ws_summary['A10'] = "Tổng số hóa đơn:"
         ws_summary['B10'] = len(invoices)
 
-        # Sheet 2: Aging Analysis
-        ws_aging = wb.create_sheet("Phân tích tuổi nợ")
+        ws_summary['A11'] = "Số hóa đơn có công nợ:"
+        ws_summary['B11'] = total_unpaid
 
-        ws_aging['A1'] = "PHÂN TÍCH TUỔI NỢ"
-        ws_aging['A1'].font = Font(bold=True, size=12)
-
-        ws_aging['A3'] = "Độ tuổi nợ"
-        ws_aging['B3'] = "Số hóa đơn"
-        ws_aging['C3'] = "Tổng tiền (VNĐ)"
-
-        for cell in ['A3', 'B3', 'C3']:
-            ws_aging[cell].font = header_font
-            ws_aging[cell].fill = header_fill
-            ws_aging[cell].alignment = Alignment(horizontal='center')
-
-        row = 4
-        for bucket in aging_buckets:
-            ws_aging[f'A{row}'] = bucket['bucket_label']
-            ws_aging[f'B{row}'] = bucket['invoice_count']
-            ws_aging[f'C{row}'] = bucket['total_amount']
-            ws_aging[f'C{row}'].number_format = '#,##0'
-            row += 1
-
-        # Add borders
-        for row_idx in range(3, row):
-            for col_idx in range(1, 4):
-                cell = ws_aging.cell(row=row_idx, column=col_idx)
-                cell.border = border
-
-        # Sheet 3: Invoice Details
+        # Sheet 2: Invoice Details (8 columns including Trạng thái)
         ws_invoices = wb.create_sheet("Chi tiết hóa đơn")
 
-        headers = ['STT', 'Số hóa đơn', 'Ngày', 'Tổng tiền', 'Đã trả', 'Còn lại', 'Trạng thái']
+        # Status translation map
+        status_map = {
+            'pending': 'Chưa thanh toán',
+            'paid': 'Đã thanh toán',
+            'processing': 'Đang xử lý',
+            'cancelled': 'Đã hủy'
+        }
+
+        headers = ['STT', 'Số hóa đơn', 'Ngày', 'Tổng tiền', 'Đã trả', 'Còn lại', 'Trạng thái', 'Ghi chú']
         for col_idx, header in enumerate(headers, 1):
             cell = ws_invoices.cell(row=1, column=col_idx)
             cell.value = header
@@ -507,61 +489,40 @@ class DebtReportService:
             cell.border = border
 
         for idx, invoice in enumerate(invoices, 2):
-            ws_invoices.cell(row=idx, column=1, value=idx-1)
-            ws_invoices.cell(row=idx, column=2, value=invoice.invoice_number)
-            ws_invoices.cell(row=idx, column=3, value=invoice.created_at.strftime('%d/%m/%Y'))
-            ws_invoices.cell(row=idx, column=4, value=invoice.total)
-            ws_invoices.cell(row=idx, column=5, value=invoice.paid_amount)
-            ws_invoices.cell(row=idx, column=6, value=invoice.remaining_amount)
+            # Format datetime with time
+            datetime_str = invoice.created_at.strftime('%d/%m/%Y %H:%M')
+            status_text = status_map.get(invoice.status, invoice.status or '')
 
-            status_map = {
-                'pending': 'Chưa thanh toán',
-                'paid': 'Đã thanh toán',
-                'processing': 'Đang xử lý'
-            }
-            ws_invoices.cell(row=idx, column=7, value=status_map.get(invoice.status, invoice.status))
+            ws_invoices.cell(row=idx, column=1, value=idx-1)  # STT
+            ws_invoices.cell(row=idx, column=2, value=invoice.invoice_number)  # Số hóa đơn
+            ws_invoices.cell(row=idx, column=3, value=datetime_str)  # Ngày
+            ws_invoices.cell(row=idx, column=4, value=invoice.total)  # Tổng tiền
+            ws_invoices.cell(row=idx, column=5, value=invoice.paid_amount)  # Đã trả
+            ws_invoices.cell(row=idx, column=6, value=invoice.remaining_amount)  # Còn lại
+            ws_invoices.cell(row=idx, column=7, value=status_text)  # Trạng thái
+            ws_invoices.cell(row=idx, column=8, value=invoice.notes or '')  # Ghi chú
 
-            # Format currency
+            # Format currency (columns 4, 5, 6)
             for col in [4, 5, 6]:
                 ws_invoices.cell(row=idx, column=col).number_format = '#,##0'
 
-            # Add borders
-            for col in range(1, 8):
+            # Center align for STT, Số HĐ, Ngày, Trạng thái
+            for col in [1, 2, 3, 7]:
+                ws_invoices.cell(row=idx, column=col).alignment = Alignment(horizontal='center')
+
+            # Right align for money columns
+            for col in [4, 5, 6]:
+                ws_invoices.cell(row=idx, column=col).alignment = Alignment(horizontal='right')
+
+            # Left align for notes with wrap_text
+            ws_invoices.cell(row=idx, column=8).alignment = Alignment(horizontal='left', wrap_text=True)
+
+            # Add borders to all 8 columns
+            for col in range(1, 9):
                 ws_invoices.cell(row=idx, column=col).border = border
 
-        # Sheet 4: Payment History
-        ws_payments = wb.create_sheet("Lịch sử thanh toán")
-
-        payment_headers = ['STT', 'Mã thanh toán', 'Ngày', 'Số tiền', 'Phương thức', 'Ghi chú']
-        for col_idx, header in enumerate(payment_headers, 1):
-            cell = ws_payments.cell(row=1, column=col_idx)
-            cell.value = header
-            cell.font = header_font
-            cell.fill = header_fill
-            cell.alignment = Alignment(horizontal='center')
-            cell.border = border
-
-        payment_method_map = {
-            'cash': 'Tiền mặt',
-            'transfer': 'Chuyển khoản',
-            'card': 'Thẻ'
-        }
-
-        for idx, payment in enumerate(payments, 2):
-            ws_payments.cell(row=idx, column=1, value=idx-1)
-            ws_payments.cell(row=idx, column=2, value=payment.payment_number)
-            ws_payments.cell(row=idx, column=3, value=payment.payment_date.strftime('%d/%m/%Y'))
-            ws_payments.cell(row=idx, column=4, value=payment.amount)
-            ws_payments.cell(row=idx, column=5, value=payment_method_map.get(payment.payment_method, payment.payment_method or ''))
-            ws_payments.cell(row=idx, column=6, value=payment.notes or '')
-
-            ws_payments.cell(row=idx, column=4).number_format = '#,##0'
-
-            for col in range(1, 7):
-                ws_payments.cell(row=idx, column=col).border = border
-
         # Auto-size columns
-        for ws in [ws_summary, ws_aging, ws_invoices, ws_payments]:
+        for ws in [ws_summary, ws_invoices]:
             for column in ws.columns:
                 max_length = 0
                 column = [cell for cell in column]
