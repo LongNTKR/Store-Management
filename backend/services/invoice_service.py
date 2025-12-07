@@ -1193,7 +1193,13 @@ class InvoiceService:
         end_date: Optional[datetime] = None
     ) -> Dict:
         """
-        Get invoice statistics using SQL aggregation for performance.
+        Get invoice statistics with debt tracking using SQL aggregation for performance.
+
+        Revenue Definitions:
+        - Total Revenue: Sum of all invoice totals (paid + pending, excluding cancelled)
+        - Collected Amount: Sum of paid_amount across all active invoices
+        - Outstanding Debt: Sum of remaining_amount across all active invoices
+        - Customers with Debt: Count of distinct customers with remaining_amount > 0
 
         Args:
             start_date: Start date filter
@@ -1202,11 +1208,11 @@ class InvoiceService:
         Returns:
             Dictionary with statistics
         """
-        from sqlalchemy import func, case
+        from sqlalchemy import func, case, distinct
 
         filters = []
-        # Exclude draft/processing invoices from revenue stats
-        filters.append(Invoice.status != 'processing')
+        # Only include paid and pending invoices (exclude cancelled and processing)
+        filters.append(Invoice.status.in_(['pending', 'paid']))
         if start_date:
             filters.append(Invoice.created_at >= start_date)
         if end_date:
@@ -1219,36 +1225,89 @@ class InvoiceService:
         # Use SQL aggregation instead of Python loops for performance
         results = query.with_entities(
             func.count(Invoice.id).label('total_invoices'),
+
+            # Total revenue = sum of all invoice totals (paid + pending)
+            func.sum(Invoice.total).label('total_revenue'),
+
+            # Collected amount = sum of paid_amount
+            func.sum(Invoice.paid_amount).label('collected_amount'),
+
+            # Outstanding debt = sum of remaining_amount
+            func.sum(Invoice.remaining_amount).label('outstanding_debt'),
+
+            # Legacy metrics (keep for backward compatibility)
             func.sum(case(
                 (Invoice.status == 'paid', Invoice.total),
                 else_=0
-            )).label('total_revenue'),
+            )).label('paid_revenue'),
             func.sum(case(
                 (Invoice.status == 'pending', Invoice.total),
                 else_=0
             )).label('pending_revenue'),
-            func.count(case(
-                (Invoice.status == 'paid', 1)
-            )).label('paid_invoices'),
-            func.count(case(
-                (Invoice.status == 'pending', 1)
-            )).label('pending_invoices'),
-            func.count(case(
-                (Invoice.status == 'cancelled', 1)
-            )).label('cancelled_invoices'),
+
+            # Invoice counts by status
+            func.count(case((Invoice.status == 'paid', 1))).label('paid_invoices'),
+            func.count(case((Invoice.status == 'pending', 1))).label('pending_invoices'),
+            func.count(case((Invoice.status == 'cancelled', 1))).label('cancelled_invoices'),
         ).first()
 
+        # Query for customers with debt (separate query for clarity)
+        customers_with_debt_query = self.db.query(
+            func.count(distinct(Invoice.customer_id))
+        ).filter(
+            Invoice.status.in_(['pending', 'paid']),
+            Invoice.remaining_amount > 0,
+            Invoice.customer_id.isnot(None)  # Exclude walk-in customers
+        )
+
+        if start_date:
+            customers_with_debt_query = customers_with_debt_query.filter(
+                Invoice.created_at >= start_date
+            )
+        if end_date:
+            customers_with_debt_query = customers_with_debt_query.filter(
+                Invoice.created_at <= end_date
+            )
+
+        customers_with_debt = customers_with_debt_query.scalar() or 0
+
+        # Extract and sanitize results
         total_invoices = results.total_invoices or 0
-        paid_invoices = results.paid_invoices or 0
         total_revenue = float(results.total_revenue or 0)
-        pending_revenue = float(results.pending_revenue or 0)
+        collected_amount = float(results.collected_amount or 0)
+        outstanding_debt = float(results.outstanding_debt or 0)
+        paid_invoices = results.paid_invoices or 0
+
+        # Count invoices with debt
+        invoices_with_debt = self.db.query(Invoice).filter(
+            Invoice.status.in_(['pending', 'paid']),
+            Invoice.remaining_amount > 0
+        )
+        if start_date:
+            invoices_with_debt = invoices_with_debt.filter(Invoice.created_at >= start_date)
+        if end_date:
+            invoices_with_debt = invoices_with_debt.filter(Invoice.created_at <= end_date)
+        invoices_with_debt_count = invoices_with_debt.count()
 
         return {
             'total_invoices': total_invoices,
             'paid_invoices': paid_invoices,
             'pending_invoices': results.pending_invoices or 0,
             'cancelled_invoices': results.cancelled_invoices or 0,
+
+            # Total revenue now includes both paid + pending
             'total_revenue': total_revenue,
-            'pending_revenue': pending_revenue,
-            'average_order_value': total_revenue / paid_invoices if paid_invoices > 0 else 0
+
+            # New: Breakdown of collected vs outstanding
+            'collected_amount': collected_amount,
+            'outstanding_debt': outstanding_debt,
+
+            # Legacy fields (keep for backward compatibility)
+            'pending_revenue': float(results.pending_revenue or 0),
+            'average_order_value': total_revenue / total_invoices if total_invoices > 0 else 0,
+
+            # Debt tracking
+            'total_debt': outstanding_debt,  # Populate existing field
+            'invoices_with_debt': invoices_with_debt_count,
+            'customers_with_debt': customers_with_debt,
         }

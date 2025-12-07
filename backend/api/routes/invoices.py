@@ -228,8 +228,19 @@ async def generate_invoice_excel(invoice_id: int, db: Session = Depends(get_db))
 
 
 @router.get("/stats", response_model=Statistics)
-async def get_statistics(db: Session = Depends(get_db)):
-    """Get invoice statistics"""
+async def get_statistics(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """Get invoice statistics with optional date filtering"""
     invoice_service = InvoiceService(db, Config.INVOICE_DIR)
-    stats = invoice_service.get_statistics()
+    
+    parsed_start = _parse_date(start_date) if start_date else None
+    parsed_end = _parse_date(end_date, end_of_day=True) if end_date else None
+
+    stats = invoice_service.get_statistics(
+        start_date=parsed_start,
+        end_date=parsed_end
+    )
     return stats

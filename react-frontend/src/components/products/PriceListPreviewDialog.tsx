@@ -3,7 +3,7 @@
  * Shows detected products with match information and allows user to review/edit before confirming.
  */
 import { useState, useMemo, useEffect } from 'react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '../ui/dialog'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Label } from '../ui/label'
@@ -148,9 +148,9 @@ export function PriceListPreviewDialog({
         <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Xem Trước Danh Sách Nhập</DialogTitle>
-            <div className="text-sm text-gray-500">
-              AI Provider: <span className="font-semibold">{previewData.provider_used}</span>
-            </div>
+            <DialogDescription>
+              AI Provider: <span className="font-semibold">{previewData.provider_used}</span> - Xem trước và chỉnh sửa danh sách sản phẩm trước khi nhập
+            </DialogDescription>
           </DialogHeader>
 
           {/* Summary Cards */}
@@ -253,6 +253,9 @@ export function PriceListPreviewDialog({
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Xác nhận thoát</DialogTitle>
+            <DialogDescription>
+              Hủy quá trình nhập danh sách giá
+            </DialogDescription>
           </DialogHeader>
           <div className="py-4">
             <p className="text-sm text-muted-foreground">

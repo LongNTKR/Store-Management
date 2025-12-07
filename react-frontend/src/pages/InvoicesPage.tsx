@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -8,7 +8,8 @@ import { useDebounce } from '@/hooks/useDebounce'
 import { useInfiniteScroll } from '@/hooks/useInfiniteScroll'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { invoiceService } from '@/services/invoices'
-import { FileDown, FileSpreadsheet, Loader2, Search, X, Eye, Pencil, CalendarRange } from 'lucide-react'
+import { FileDown, FileSpreadsheet, Loader2, Search, X, Eye, Pencil } from 'lucide-react'
+import { Input } from '@/components/ui/input'
 import type { Invoice } from '@/types'
 import { InvoiceDetailsDialog } from '@/components/invoices/InvoiceDetailsDialog'
 import { SearchHighlight } from '@/components/shared/SearchHighlight'
@@ -27,15 +28,6 @@ export function InvoicesPage() {
     const [searchQuery, setSearchQuery] = useState<string>('')
     const [startDate, setStartDate] = useState<string>('') // applied filter
     const [endDate, setEndDate] = useState<string>('') // applied filter
-    const [pendingStartDate, setPendingStartDate] = useState<string>('')
-    const [pendingEndDate, setPendingEndDate] = useState<string>('')
-    const [currentMonth, setCurrentMonth] = useState<Date>(new Date())
-    const yearOptions = useMemo(() => {
-        const current = new Date().getFullYear()
-        return Array.from({ length: 11 }, (_, i) => current - 5 + i)
-    }, [])
-    const [datePickerOpen, setDatePickerOpen] = useState<boolean>(false)
-    const datePickerRef = useRef<HTMLDivElement | null>(null)
     const debouncedSearch = useDebounce(searchQuery.trim(), 300)
 
     const {
@@ -75,143 +67,6 @@ export function InvoicesPage() {
     const clearDateFilters = () => {
         setStartDate('')
         setEndDate('')
-        setPendingStartDate('')
-        setPendingEndDate('')
-    }
-
-    // Close date picker on outside click or ESC
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (datePickerRef.current && !datePickerRef.current.contains(event.target as Node)) {
-                setDatePickerOpen(false)
-            }
-        }
-        const handleEsc = (event: KeyboardEvent) => {
-            if (event.key === 'Escape') {
-                setDatePickerOpen(false)
-            }
-        }
-        document.addEventListener('mousedown', handleClickOutside)
-        document.addEventListener('keydown', handleEsc)
-        return () => {
-            document.removeEventListener('mousedown', handleClickOutside)
-            document.removeEventListener('keydown', handleEsc)
-        }
-    }, [])
-
-    const dateRangeLabel = useMemo(() => {
-        if (!startDate && !endDate) return 'Chọn khoảng ngày'
-        if (startDate && endDate) {
-            return `${formatDate(startDate)} - ${formatDate(endDate)}`
-        }
-        if (startDate) return `Từ ${formatDate(startDate)}`
-        return `Đến ${formatDate(endDate as string)}`
-    }, [startDate, endDate])
-
-    // Sync pending range with applied range when opening picker
-    useEffect(() => {
-        if (datePickerOpen) {
-            setPendingStartDate(startDate)
-            setPendingEndDate(endDate)
-            const base = startDate ? new Date(startDate) : endDate ? new Date(endDate) : new Date()
-            setCurrentMonth(new Date(base.getFullYear(), base.getMonth(), 1))
-        }
-    }, [datePickerOpen, startDate, endDate])
-
-    const isSameDay = (a?: string, b?: string) => {
-        if (!a || !b) return false
-        return a === b
-    }
-
-    const isInPendingRange = (dateStr: string) => {
-        if (!pendingStartDate || !pendingEndDate) return false
-        return pendingStartDate <= dateStr && dateStr <= pendingEndDate
-    }
-
-    const handleDaySelect = (dateStr: string) => {
-        if (!pendingStartDate || (pendingStartDate && pendingEndDate)) {
-            setPendingStartDate(dateStr)
-            setPendingEndDate('')
-            return
-        }
-
-        if (dateStr < pendingStartDate) {
-            setPendingEndDate(pendingStartDate)
-            setPendingStartDate(dateStr)
-            return
-        }
-
-        setPendingEndDate(dateStr)
-    }
-
-    const handleApplyDate = () => {
-        setStartDate(pendingStartDate)
-        setEndDate(pendingEndDate)
-        setDatePickerOpen(false)
-    }
-
-    const handleMonthChange = (delta: number) => {
-        setCurrentMonth((prev) => {
-            const next = new Date(prev)
-            next.setMonth(prev.getMonth() + delta)
-            return next
-        })
-    }
-
-    const handleMonthSelect = (monthIndex: number) => {
-        setCurrentMonth((prev) => new Date(prev.getFullYear(), monthIndex, 1))
-    }
-
-    const handleYearSelect = (year: number) => {
-        setCurrentMonth((prev) => new Date(year, prev.getMonth(), 1))
-    }
-
-    const toDateKey = (date: Date) => {
-        const y = date.getFullYear()
-        const m = `${date.getMonth() + 1}`.padStart(2, '0')
-        const d = `${date.getDate()}`.padStart(2, '0')
-        return `${y}-${m}-${d}`
-    }
-
-    const renderCalendarDays = () => {
-        const year = currentMonth.getFullYear()
-        const month = currentMonth.getMonth()
-        const firstDay = new Date(year, month, 1)
-        const startWeekday = firstDay.getDay() // 0 = Sunday
-        const daysInMonth = new Date(year, month + 1, 0).getDate()
-
-        const cells: ReactNode[] = []
-        // leading blanks
-        for (let i = 0; i < startWeekday; i++) {
-            cells.push(<div key={`blank-${i}`} className="h-9" />)
-        }
-
-        for (let day = 1; day <= daysInMonth; day++) {
-            const dateStr = toDateKey(new Date(year, month, day))
-            const selectedStart = isSameDay(pendingStartDate, dateStr)
-            const selectedEnd = isSameDay(pendingEndDate, dateStr)
-            const inRange = isInPendingRange(dateStr)
-
-            const baseClasses = "h-9 w-9 rounded-md text-sm flex items-center justify-center cursor-pointer transition"
-            let stateClasses = "hover:bg-primary/10"
-            if (selectedStart || selectedEnd) {
-                stateClasses = "bg-primary text-primary-foreground hover:bg-primary"
-            } else if (inRange) {
-                stateClasses = "bg-primary/10 text-primary hover:bg-primary/20"
-            }
-
-            cells.push(
-                <button
-                    key={day}
-                    className={`${baseClasses} ${stateClasses}`}
-                    onClick={() => handleDaySelect(dateStr)}
-                >
-                    {day}
-                </button>
-            )
-        }
-
-        return cells
     }
 
     const handleDownload = async (invoiceId: number, type: 'pdf' | 'excel') => {
@@ -292,103 +147,33 @@ export function InvoicesPage() {
                         </Select>
                     </div>
 
-                    <div className="relative flex items-center gap-3" ref={datePickerRef}>
+                    <div className="flex items-center gap-2">
                         <span className="text-sm text-muted-foreground">Khoảng ngày:</span>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            className="min-w-[220px] justify-between gap-2"
-                            onClick={() => setDatePickerOpen((prev) => !prev)}
-                        >
-                            <span className="flex items-center gap-2 text-sm">
-                                <CalendarRange className="h-4 w-4" />
-                                {dateRangeLabel}
-                            </span>
-                        </Button>
-
-                        {datePickerOpen && (
-                            <div
-                                className="absolute left-0 top-10 z-20 w-[360px] rounded-lg border bg-background p-4 shadow-lg"
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter') {
-                                        e.preventDefault()
-                                        handleApplyDate()
-                                    }
-                                }}
-                                tabIndex={-1}
+                        <div className="flex items-center gap-2">
+                            <Input
+                                type="date"
+                                value={startDate}
+                                onChange={(e) => setStartDate(e.target.value)}
+                                className="h-9 w-[140px] bg-white"
+                            />
+                            <span className="text-muted-foreground">-</span>
+                            <Input
+                                type="date"
+                                value={endDate}
+                                onChange={(e) => setEndDate(e.target.value)}
+                                className="h-9 w-[140px] bg-white"
+                            />
+                        </div>
+                        {(startDate || endDate) && (
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={clearDateFilters}
+                                className="h-9 px-2 text-muted-foreground hover:text-foreground"
                             >
-                                <div className="flex items-center justify-between gap-2 pb-3">
-                                    <Button variant="ghost" size="icon" onClick={() => handleMonthChange(-1)}>
-                                        ‹
-                                    </Button>
-                                    <div className="flex items-center gap-2 text-sm">
-                                        <select
-                                            className="rounded-md border border-input bg-background px-2 py-1 text-sm focus:outline-none"
-                                            value={currentMonth.getMonth()}
-                                            onChange={(e) => handleMonthSelect(Number(e.target.value))}
-                                        >
-                                            {[
-                                                'Tháng 1', 'Tháng 2', 'Tháng 3', 'Tháng 4', 'Tháng 5', 'Tháng 6',
-                                                'Tháng 7', 'Tháng 8', 'Tháng 9', 'Tháng 10', 'Tháng 11', 'Tháng 12'
-                                            ].map((label, idx) => (
-                                                <option key={idx} value={idx}>{label}</option>
-                                            ))}
-                                        </select>
-                                        <select
-                                            className="rounded-md border border-input bg-background px-2 py-1 text-sm focus:outline-none"
-                                            value={currentMonth.getFullYear()}
-                                            onChange={(e) => handleYearSelect(Number(e.target.value))}
-                                        >
-                                            {yearOptions.map((year) => (
-                                                <option key={year} value={year}>{year}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                    <Button variant="ghost" size="icon" onClick={() => handleMonthChange(1)}>
-                                        ›
-                                    </Button>
-                                </div>
-                                <div className="grid grid-cols-7 gap-1 text-center text-xs text-muted-foreground mb-2">
-                                    <span>Su</span>
-                                    <span>Mo</span>
-                                    <span>Tu</span>
-                                    <span>We</span>
-                                    <span>Th</span>
-                                    <span>Fr</span>
-                                    <span>Sa</span>
-                                </div>
-                                <div className="grid grid-cols-7 gap-1">
-                                    {renderCalendarDays()}
-                                </div>
-                                <div className="mt-3 space-y-1 text-xs text-muted-foreground">
-                                    <div>Chọn ngày bắt đầu, sau đó ngày kết thúc. Enter hoặc bấm Áp dụng để lọc.</div>
-                                    <div className="text-foreground font-medium">
-                                        {pendingStartDate ? `Từ ${formatDate(pendingStartDate)}` : 'Chưa chọn ngày bắt đầu'}
-                                        {pendingEndDate ? ` • Đến ${formatDate(pendingEndDate)}` : ''}
-                                    </div>
-                                </div>
-                                <div className="flex justify-end gap-2 pt-3">
-                                    <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => {
-                                            clearDateFilters()
-                                            setDatePickerOpen(false)
-                                        }}
-                                        disabled={!startDate && !endDate && !pendingStartDate && !pendingEndDate}
-                                        className="text-muted-foreground hover:text-primary"
-                                    >
-                                        Xóa
-                                    </Button>
-                                    <Button
-                                        size="sm"
-                                        onClick={handleApplyDate}
-                                        disabled={!pendingStartDate && !pendingEndDate}
-                                    >
-                                        Áp dụng
-                                    </Button>
-                                </div>
-                            </div>
+                                <X className="mr-1 h-3 w-3" />
+                                Xóa
+                            </Button>
                         )}
                     </div>
                 </div>

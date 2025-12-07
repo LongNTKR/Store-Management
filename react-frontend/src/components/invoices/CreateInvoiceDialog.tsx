@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '../ui/dialog'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Label } from '../ui/label'
@@ -390,6 +390,9 @@ export function CreateInvoiceDialog({
             <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle>{isEditMode ? 'Chỉnh sửa hóa đơn' : 'Tạo Hóa Đơn Mới'}</DialogTitle>
+                    <DialogDescription>
+                        {isEditMode ? 'Cập nhật thông tin hóa đơn và sản phẩm' : 'Tạo hóa đơn mới cho khách hàng'}
+                    </DialogDescription>
                 </DialogHeader>
 
                 <form onSubmit={handleSubmit} className="space-y-6">

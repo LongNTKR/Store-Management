@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, Fragment } from 'react'
 import { ChevronDown, ChevronRight, RotateCcw } from 'lucide-react'
 import {
   Table,
@@ -83,9 +83,9 @@ export function PaymentHistoryTable({
               const isReversed = payment.notes?.includes('[ĐÃ HỦY]')
 
               return (
-                <>
+                <Fragment key={payment.id}>
                   {/* Main payment row */}
-                  <TableRow key={payment.id} className={`group ${isReversed ? 'bg-muted/30' : ''}`}>
+                  <TableRow className={`group ${isReversed ? 'bg-muted/30' : ''}`}>
                     <TableCell>
                       {hasAllocations && (
                         <button
@@ -157,7 +157,7 @@ export function PaymentHistoryTable({
                       </TableCell>
                     </TableRow>
                   )}
-                </>
+                </Fragment>
               )
             })}
           </TableBody>

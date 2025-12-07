@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
@@ -124,6 +125,9 @@ export function CustomerDebtDetailDialog({
             <DialogTitle className="text-xl">
               Công nợ khách hàng: {customerName || `ID ${customerId}`}
             </DialogTitle>
+            <DialogDescription>
+              Xem chi tiết công nợ, hóa đơn, lịch sử thanh toán và phân tích tuổi nợ
+            </DialogDescription>
           </DialogHeader>
 
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
@@ -343,14 +347,14 @@ function InvoiceTabContent({ customerId }: { customerId: number }) {
             type="date"
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
-            className="h-8 w-[130px] bg-white"
+            className="h-8 w-[140px] bg-white"
           />
           <span className="text-muted-foreground">-</span>
           <Input
             type="date"
             value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
-            className="h-8 w-[130px] bg-white"
+            className="h-8 w-[140px] bg-white"
           />
         </div>
 

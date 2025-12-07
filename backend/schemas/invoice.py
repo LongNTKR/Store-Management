@@ -108,12 +108,16 @@ class Invoice(BaseModel):
 
 class Statistics(BaseModel):
     total_invoices: int
-    total_revenue: float
+    total_revenue: float  # Now includes paid + pending invoices
     paid_invoices: int
     pending_invoices: int
     cancelled_invoices: int
-    pending_revenue: float
+    pending_revenue: float  # Legacy: revenue from pending invoices only
     average_order_value: float
-    # Debt tracking
-    total_debt: float = 0
-    invoices_with_debt: int = 0
+
+    # Enhanced debt tracking
+    collected_amount: float = 0  # Total amount collected (sum of paid_amount)
+    outstanding_debt: float = 0  # Total amount outstanding (sum of remaining_amount)
+    total_debt: float = 0  # Legacy alias for outstanding_debt
+    invoices_with_debt: int = 0  # Count of invoices with remaining_amount > 0
+    customers_with_debt: int = 0  # Count of distinct customers with debt

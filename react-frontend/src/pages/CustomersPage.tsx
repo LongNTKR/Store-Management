@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ChangeEvent } from 'react'
+import { useEffect, useMemo, useState, useRef, type ChangeEvent } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -27,6 +27,7 @@ import {
 import { toast } from 'sonner'
 import { cn, formatCurrency } from '@/lib/utils'
 import { paymentService } from '@/services/payments'
+import { customerService } from '@/services/customers'
 import { RecordPaymentDialog } from '@/components/payments/RecordPaymentDialog'
 import { CustomerDebtDetailDialog } from '@/components/debt/CustomerDebtDetailDialog'
 
@@ -102,6 +103,45 @@ export function CustomersPage() {
             return next.length === prev.length ? prev : next
         })
     }, [customersWithDebt])
+
+    // Handle deep linking for debt view - Track if already processed
+    const processedDeepLinkRef = useRef(false)
+
+    useEffect(() => {
+        // Prevent re-processing on component re-mounts
+        if (processedDeepLinkRef.current) {
+            console.log('[DEBUG] Already processed deep link, skipping')
+            return
+        }
+
+        const params = new URLSearchParams(window.location.search)
+        const view = params.get('view')
+        const id = params.get('id')
+
+        if (view === 'debt' && id) {
+            // Mark as processed IMMEDIATELY before async operation
+            processedDeepLinkRef.current = true
+
+            const customerId = parseInt(id)
+            console.log('[DEBUG] Processing deep link for customer:', customerId)
+
+            // Fetch customer by ID - no pagination dependency
+            customerService.getById(customerId)
+                .then(customer => {
+                    console.log('[DEBUG] Setting dialog state for:', customer.name)
+                    setDebtDetailCustomer({ id: customer.id, name: customer.name })
+                    setDebtDetailDialogOpen(true)
+                    // Clean URL after successful open
+                    window.history.replaceState({}, '', '/customers')
+                })
+                .catch(error => {
+                    console.error('[DEBUG] Error fetching customer:', error)
+                    toast.error('Không tìm thấy khách hàng')
+                    // Reset ref on error so user can retry
+                    processedDeepLinkRef.current = false
+                })
+        }
+    }, []) // Empty deps - only runs on mount
 
     const toggleCustomerSelection = (customerId: number) => {
         setSelectedCustomerIds((prev) =>

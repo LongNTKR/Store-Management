@@ -44,6 +44,8 @@ export function useCreateInvoice() {
             queryClient.invalidateQueries({ queryKey: ['customer-debt'] })
             queryClient.invalidateQueries({ queryKey: ['customer-debt-detail'] })
             queryClient.invalidateQueries({ queryKey: ['all-customer-debts'] })
+            // Invalidate aging analysis
+            queryClient.invalidateQueries({ queryKey: ['aging-analysis'] })
 
             toast.success('Tạo hóa đơn thành công!')
         },
@@ -71,6 +73,8 @@ export function useUpdateInvoiceStatus() {
             queryClient.invalidateQueries({ queryKey: ['customer-debt'] })
             queryClient.invalidateQueries({ queryKey: ['customer-debt-detail'] })
             queryClient.invalidateQueries({ queryKey: ['all-customer-debts'] })
+            // Invalidate aging analysis
+            queryClient.invalidateQueries({ queryKey: ['aging-analysis'] })
             // Invalidate invoice payments (for details dialog)
             queryClient.invalidateQueries({ queryKey: ['invoice-payments'] })
 
@@ -99,6 +103,8 @@ export function useUpdateInvoice() {
             queryClient.invalidateQueries({ queryKey: ['customer-debt'] })
             queryClient.invalidateQueries({ queryKey: ['customer-debt-detail'] })
             queryClient.invalidateQueries({ queryKey: ['all-customer-debts'] })
+            // Invalidate aging analysis
+            queryClient.invalidateQueries({ queryKey: ['aging-analysis'] })
             // Invalidate invoice payments
             queryClient.invalidateQueries({ queryKey: ['invoice-payments'] })
             toast.success('Cập nhật hóa đơn thành công!')
@@ -110,9 +116,9 @@ export function useUpdateInvoice() {
     })
 }
 
-export function useStatistics() {
+export function useStatistics(params?: { start_date?: string; end_date?: string }) {
     return useQuery({
-        queryKey: ['statistics'],
-        queryFn: invoiceService.getStatistics,
+        queryKey: ['statistics', params],
+        queryFn: () => invoiceService.getStatistics(params),
     })
 }

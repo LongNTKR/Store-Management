@@ -87,8 +87,8 @@ export const invoiceService = {
         return response.data
     },
 
-    getStatistics: async (): Promise<Statistics> => {
-        const response = await api.get('/api/stats')
+    getStatistics: async (params?: { start_date?: string; end_date?: string }): Promise<Statistics> => {
+        const response = await api.get('/api/stats', { params })
         return response.data
     },
 }

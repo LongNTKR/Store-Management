@@ -134,15 +134,19 @@ export interface InvoiceItem {
 
 export interface Statistics {
     total_invoices: number
-    total_revenue: number
+    total_revenue: number  // Now includes paid + pending
     paid_invoices: number
     pending_invoices: number
     cancelled_invoices: number
     pending_revenue: number
     average_order_value: number
-    // Debt tracking
-    total_debt: number
+
+    // Enhanced debt tracking
+    collected_amount: number  // Money actually collected
+    outstanding_debt: number  // Money still owed
+    total_debt: number  // Legacy field
     invoices_with_debt: number
+    customers_with_debt: number  // Count of customers in debt
 }
 
 export interface CustomerStats {

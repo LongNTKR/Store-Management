@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -147,6 +147,9 @@ export function RecordPaymentDialog({
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Ghi nhận thanh toán</DialogTitle>
+          <DialogDescription>
+            Ghi nhận khoản thanh toán từ khách hàng và phân bổ cho các hóa đơn
+          </DialogDescription>
         </DialogHeader>
 
         {isLoading ? (
