@@ -112,6 +112,10 @@ export interface Invoice {
     paid_amount: number
     remaining_amount: number
     payment_status?: 'unpaid' | 'partial' | 'paid'
+    // Returns tracking
+    has_returns?: boolean
+    total_returned_amount?: number
+    net_amount?: number
     // Status
     status: 'pending' | 'paid' | 'cancelled' | 'processing'
     payment_method?: string

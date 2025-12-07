@@ -229,7 +229,13 @@ export function InvoicesPage() {
                                         <SelectItem value="processing" disabled>Chờ xử lý</SelectItem>
                                         <SelectItem value="pending">Chưa thanh toán</SelectItem>
                                         <SelectItem value="paid">Đã thanh toán</SelectItem>
-                                        <SelectItem value="cancelled">Đã hủy</SelectItem>
+                                        <SelectItem
+                                            value="cancelled"
+                                            disabled={invoice.paid_amount > 0}
+                                            title={invoice.paid_amount > 0 ? 'Không thể hủy hóa đơn đã thanh toán. Vui lòng dùng tính năng Hoàn trả.' : undefined}
+                                        >
+                                            Đã hủy
+                                        </SelectItem>
                                     </SelectContent>
                                 </Select>
                             </CardHeader>
@@ -266,11 +272,18 @@ export function InvoicesPage() {
                                     )}
 
                                     {/* Payment status badge */}
-                                    {invoice.payment_status === 'partial' && (
-                                        <span className="inline-block px-2 py-0.5 text-xs rounded-full bg-amber-100 text-amber-800 border border-amber-300">
-                                            Đã trả một phần
-                                        </span>
-                                    )}
+                                    <div className="flex gap-1 justify-end flex-wrap">
+                                        {invoice.payment_status === 'partial' && (
+                                            <span className="inline-block px-2 py-0.5 text-xs rounded-full bg-amber-100 text-amber-800 border border-amber-300">
+                                                Đã trả một phần
+                                            </span>
+                                        )}
+                                        {invoice.has_returns && (
+                                            <span className="inline-block px-2 py-0.5 text-xs rounded-full bg-red-100 text-red-800 border border-red-300">
+                                                Đã hoàn trả
+                                            </span>
+                                        )}
+                                    </div>
                                 </div>
                                 <div className="flex gap-2">
                                     <Button

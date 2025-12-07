@@ -1,3 +1,4 @@
+import { useState } from "react"
 import {
     Dialog,
     DialogContent,
@@ -13,11 +14,16 @@ import {
     TableRow,
 } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Button } from "@/components/ui/button"
 import { formatCurrency, formatDate } from "@/lib/utils"
 import type { Invoice } from "@/types"
 import { useQuery } from "@tanstack/react-query"
 import { paymentService } from "@/services/payments"
-import { Loader2 } from "lucide-react"
+import { useInvoiceReturns } from "@/hooks/useInvoiceReturns"
+import { CreateReturnDialog } from "./CreateReturnDialog"
+import { Loader2, Package, FileText } from "lucide-react"
+import { invoiceReturnService } from "@/services/invoiceReturns"
+import { toast } from "sonner"
 
 const paymentMethodMap: Record<string, string> = {
     cash: 'Tiền mặt',
@@ -36,6 +42,9 @@ export function InvoiceDetailsDialog({
     open,
     onOpenChange,
 }: InvoiceDetailsDialogProps) {
+    const [createReturnDialogOpen, setCreateReturnDialogOpen] = useState(false)
+    const [downloadingReturn, setDownloadingReturn] = useState<number | null>(null)
+
     // Fetch payment allocations for this invoice
     const { data: paymentAllocations, isLoading: isLoadingPayments } = useQuery({
         queryKey: ['invoice-payments', invoice?.id],
@@ -43,11 +52,37 @@ export function InvoiceDetailsDialog({
         enabled: !!invoice?.id && open
     })
 
+    // Fetch returns for this invoice
+    const { data: invoiceReturns, isLoading: isLoadingReturns } = useInvoiceReturns(open ? invoice?.id || null : null)
+
+    // Calculate total returned amount
+    const totalReturnedAmount = invoiceReturns?.reduce((sum, ret) => sum + ret.refund_amount, 0) || 0
+
+    // Handle PDF download
+    const handleDownloadReturnPdf = async (returnId: number) => {
+        setDownloadingReturn(returnId)
+        try {
+            const blob = await invoiceReturnService.generateReturnPdf(returnId)
+            const url = URL.createObjectURL(blob)
+            const link = document.createElement('a')
+            link.href = url
+            link.download = `return_${returnId}.pdf`
+            link.click()
+            URL.revokeObjectURL(url)
+            toast.success('Đã tải phiếu hoàn trả PDF')
+        } catch (error: any) {
+            const errorMsg = error?.response?.data?.detail || 'Không thể tạo PDF'
+            toast.error(errorMsg)
+        } finally {
+            setDownloadingReturn(null)
+        }
+    }
+
     if (!invoice) return null
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+            <DialogContent className="max-w-5xl">
                 <DialogHeader>
                     <DialogTitle className="text-xl font-bold">
                         Chi tiết hóa đơn: {invoice.invoice_number}
@@ -55,12 +90,13 @@ export function InvoiceDetailsDialog({
                 </DialogHeader>
 
                 <Tabs defaultValue="details" className="w-full">
-                    <TabsList className="grid w-full grid-cols-2">
+                    <TabsList className="grid w-full grid-cols-3">
                         <TabsTrigger value="details">Chi tiết</TabsTrigger>
                         <TabsTrigger value="payments">Thanh toán</TabsTrigger>
+                        <TabsTrigger value="returns">Hoàn trả</TabsTrigger>
                     </TabsList>
 
-                    <TabsContent value="details" className="space-y-6 py-4">
+                    <TabsContent value="details" className="space-y-6 py-4 h-[550px] overflow-y-auto">
                         {/* Customer Info */}
                         <div className="grid grid-cols-2 gap-4 rounded-lg bg-muted/50 p-4">
                             <div>
@@ -164,10 +200,10 @@ export function InvoiceDetailsDialog({
                     </TabsContent>
 
                     {/* Tab: Payments */}
-                    <TabsContent value="payments" className="space-y-4 py-4">
+                    <TabsContent value="payments" className="space-y-4 py-4 h-[550px] overflow-y-auto">
                         <div className="space-y-4">
                             {/* Payment summary */}
-                            <div className="grid grid-cols-3 gap-4 p-4 bg-muted/50 rounded-lg">
+                            <div className="grid grid-cols-4 gap-4 p-4 bg-muted/50 rounded-lg">
                                 <div>
                                     <p className="text-sm text-muted-foreground">Tổng hóa đơn</p>
                                     <p className="text-lg font-semibold">{formatCurrency(invoice.total)}</p>
@@ -176,6 +212,12 @@ export function InvoiceDetailsDialog({
                                     <p className="text-sm text-muted-foreground">Đã thanh toán</p>
                                     <p className="text-lg font-semibold text-emerald-600">
                                         {formatCurrency(invoice.paid_amount || 0)}
+                                    </p>
+                                </div>
+                                <div>
+                                    <p className="text-sm text-muted-foreground">Đã hoàn trả</p>
+                                    <p className="text-lg font-semibold text-red-600">
+                                        {formatCurrency(totalReturnedAmount)}
                                     </p>
                                 </div>
                                 <div>
@@ -238,7 +280,115 @@ export function InvoiceDetailsDialog({
                             </div>
                         </div>
                     </TabsContent>
+
+                    {/* Tab: Returns */}
+                    <TabsContent value="returns" className="space-y-4 py-4 h-[550px] overflow-y-auto">
+                        <div className="flex justify-between items-center mb-4">
+                            <h4 className="font-semibold">Lịch sử hoàn trả</h4>
+                            <Button
+                                size="sm"
+                                onClick={() => setCreateReturnDialogOpen(true)}
+                                disabled={invoice.status === 'cancelled' || invoice.status === 'processing'}
+                            >
+                                <Package className="h-4 w-4 mr-2" />
+                                Tạo hoàn trả mới
+                            </Button>
+                        </div>
+
+                        {isLoadingReturns ? (
+                            <div className="flex items-center justify-center py-8">
+                                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                                <span className="ml-2 text-sm text-muted-foreground">Đang tải...</span>
+                            </div>
+                        ) : invoiceReturns && invoiceReturns.length > 0 ? (
+                            <div className="space-y-4">
+                                {invoiceReturns.map((returnItem) => (
+                                    <div key={returnItem.id} className="border rounded-lg p-4 space-y-3">
+                                        <div className="flex items-start justify-between">
+                                            <div className="space-y-1">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="font-semibold">{returnItem.return_number}</span>
+                                                    {returnItem.is_full_return && (
+                                                        <span className="text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded">
+                                                            Hoàn trả toàn bộ
+                                                        </span>
+                                                    )}
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation()
+                                                            handleDownloadReturnPdf(returnItem.id)
+                                                        }}
+                                                        disabled={downloadingReturn === returnItem.id}
+                                                    >
+                                                        {downloadingReturn === returnItem.id ? (
+                                                            <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                                                        ) : (
+                                                            <FileText className="h-4 w-4 mr-1" />
+                                                        )}
+                                                        PDF
+                                                    </Button>
+                                                </div>
+                                                <p className="text-sm text-muted-foreground">
+                                                    {formatDate(returnItem.created_at, 'dd/MM/yyyy HH:mm')}
+                                                    {returnItem.created_by && ` • ${returnItem.created_by}`}
+                                                </p>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="text-sm text-muted-foreground">Hoàn tiền</p>
+                                                <p className="text-lg font-semibold text-red-600">
+                                                    {formatCurrency(returnItem.refund_amount)}
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-1 text-sm">
+                                            <p>
+                                                <span className="font-medium">Lý do:</span> {returnItem.reason}
+                                            </p>
+                                            {returnItem.notes && (
+                                                <p className="text-muted-foreground">
+                                                    <span className="font-medium">Ghi chú:</span> {returnItem.notes}
+                                                </p>
+                                            )}
+                                        </div>
+
+                                        <div className="border-t pt-3 space-y-2">
+                                            <p className="text-sm font-medium">Sản phẩm hoàn trả:</p>
+                                            <div className="space-y-1">
+                                                {returnItem.return_items.map((item) => (
+                                                    <div key={item.id} className="flex justify-between text-sm pl-4">
+                                                        <span>
+                                                            • {item.product_name}: {item.quantity_returned} {item.unit}
+                                                        </span>
+                                                        <span className="text-muted-foreground">
+                                                            {formatCurrency(item.subtotal)}
+                                                        </span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="text-center py-8 rounded-lg border border-dashed">
+                                <Package className="h-12 w-12 mx-auto text-muted-foreground/50 mb-2" />
+                                <p className="text-sm text-muted-foreground">
+                                    Chưa có hoàn trả nào cho hóa đơn này
+                                </p>
+                            </div>
+                        )}
+                    </TabsContent>
                 </Tabs>
+
+                {/* Create Return Dialog */}
+                <CreateReturnDialog
+                    invoiceId={invoice.id}
+                    open={createReturnDialogOpen}
+                    onOpenChange={setCreateReturnDialogOpen}
+                />
             </DialogContent>
         </Dialog>
     )

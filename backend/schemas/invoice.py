@@ -94,6 +94,10 @@ class Invoice(BaseModel):
     paid_amount: float = 0
     remaining_amount: float
     payment_status: Optional[str] = None  # 'unpaid', 'partial', 'paid' (computed from model)
+    # Returns tracking
+    has_returns: Optional[bool] = None  # Computed from model
+    total_returned_amount: Optional[float] = None  # Computed from model
+    net_amount: Optional[float] = None  # Computed from model
     # Status
     status: str = "pending"
     payment_method: Optional[str] = None

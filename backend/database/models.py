@@ -203,6 +203,11 @@ class Invoice(Base):
         back_populates='invoice',
         order_by='PaymentAllocation.allocation_date.desc()'
     )
+    returns = relationship(
+        'InvoiceReturn',
+        back_populates='invoice',
+        order_by='InvoiceReturn.created_at.desc()'
+    )
 
     def __repr__(self):
         return f"<Invoice(id={self.id}, number='{self.invoice_number}', total={self.total})>"
@@ -226,6 +231,21 @@ class Invoice(Base):
     def is_partially_paid(self) -> bool:
         """Check if invoice has partial payment."""
         return self.paid_amount > 0 and self.remaining_amount > 0.01
+
+    @property
+    def total_returned_amount(self) -> float:
+        """Total amount returned from all returns."""
+        return sum(ret.refund_amount for ret in self.returns)
+
+    @property
+    def has_returns(self) -> bool:
+        """Check if invoice has any returns."""
+        return len(self.returns) > 0
+
+    @property
+    def net_amount(self) -> float:
+        """Net amount = total - total_returned_amount."""
+        return self.total - self.total_returned_amount
 
 
 class InvoiceItem(Base):
@@ -368,3 +388,70 @@ class PaymentAllocation(Base):
 
     def __repr__(self):
         return f"<PaymentAllocation(id={self.id}, payment_id={self.payment_id}, invoice_id={self.invoice_id}, amount={self.amount})>"
+
+
+class InvoiceReturn(Base):
+    """Invoice return model - tracks invoice return transactions."""
+
+    __tablename__ = 'invoice_returns'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    return_number = Column(String(50), unique=True, nullable=False, index=True)  # RET-YYYYMMDD-XXXX
+
+    # Foreign Keys
+    invoice_id = Column(Integer, ForeignKey('invoices.id'), nullable=False, index=True)
+    refund_payment_id = Column(Integer, ForeignKey('payments.id'), nullable=True, index=True)
+
+    # Return Details
+    reason = Column(Text, nullable=False)  # Reason for return (min 3 chars)
+    refund_amount = Column(Float, default=0, nullable=False)  # Amount refunded (can be 0)
+    is_full_return = Column(Boolean, default=False)  # Full or partial return
+
+    # Metadata
+    created_at = Column(DateTime, default=get_vn_time, index=True)
+    created_by = Column(String(100), nullable=True)  # Username/staff who processed return
+    notes = Column(Text, nullable=True)
+
+    # Relationships
+    invoice = relationship('Invoice', back_populates='returns')
+    return_items = relationship('InvoiceReturnItem', back_populates='invoice_return', cascade='all, delete-orphan')
+    refund_payment = relationship('Payment', foreign_keys=[refund_payment_id])
+
+    # Indexes for performance
+    __table_args__ = (
+        Index('idx_return_invoice_date', 'invoice_id', 'created_at'),
+    )
+
+    def __repr__(self):
+        return f"<InvoiceReturn(id={self.id}, number='{self.return_number}', refund={self.refund_amount})>"
+
+
+class InvoiceReturnItem(Base):
+    """Invoice return item model - tracks individual items in a return."""
+
+    __tablename__ = 'invoice_return_items'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+
+    # Foreign Keys
+    invoice_return_id = Column(Integer, ForeignKey('invoice_returns.id'), nullable=False, index=True)
+    invoice_item_id = Column(Integer, ForeignKey('invoice_items.id'), nullable=False, index=True)
+    product_id = Column(Integer, ForeignKey('products.id'), nullable=True)
+
+    # Product Snapshot (at time of return)
+    product_name = Column(String(255), nullable=False)
+    product_price = Column(Float, nullable=False)
+    unit = Column(String(50), default='cái')
+
+    # Return Details
+    quantity_returned = Column(Float, nullable=False)  # Quantity being returned
+    subtotal = Column(Float, nullable=False)  # quantity_returned * product_price
+    restore_inventory = Column(Boolean, default=True)  # Whether to restore stock
+
+    # Relationships
+    invoice_return = relationship('InvoiceReturn', back_populates='return_items')
+    invoice_item = relationship('InvoiceItem')
+    product = relationship('Product')
+
+    def __repr__(self):
+        return f"<InvoiceReturnItem(id={self.id}, product='{self.product_name}', qty={self.quantity_returned})>"

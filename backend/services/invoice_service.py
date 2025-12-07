@@ -699,6 +699,13 @@ class InvoiceService:
         if invoice.status == 'processing':
             raise ValueError("Không thể cập nhật trạng thái của hóa đơn đang chờ xử lý. Vui lòng hoàn tất hóa đơn trước.")
 
+        # NEW: Validate cancel with payments
+        if status == 'cancelled' and invoice.paid_amount > 0:
+            raise ValueError(
+                f"Không thể hủy hóa đơn đã thanh toán {invoice.paid_amount:,.0f}đ. "
+                f"Vui lòng sử dụng tính năng 'Hoàn trả hóa đơn' thay thế."
+            )
+
         # If status is being changed to 'paid', we need to settle the debt
         if status == 'paid' and invoice.remaining_amount > 0.01:
             try:
