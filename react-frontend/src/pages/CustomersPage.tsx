@@ -308,36 +308,38 @@ export function CustomersPage() {
                                                         Có {customer.debt_summary.overdue_invoices} hóa đơn quá hạn
                                                     </p>
                                                 )}
-
-                                                <div className="mt-2 flex gap-2">
-                                                    <Button
-                                                        size="sm"
-                                                        variant="outline"
-                                                        className="flex-1"
-                                                        onClick={() => {
-                                                            setDebtDetailCustomer({ id: customer.id, name: customer.name })
-                                                            setDebtDetailDialogOpen(true)
-                                                        }}
-                                                    >
-                                                        Xem chi tiết
-                                                    </Button>
-                                                    <Button
-                                                        size="sm"
-                                                        className="flex-1"
-                                                        onClick={() => {
-                                                            setPaymentCustomerId(customer.id)
-                                                            setPaymentDialogOpen(true)
-                                                        }}
-                                                    >
-                                                        Thu nợ
-                                                    </Button>
-                                                </div>
                                             </div>
                                         ) : (
                                             isFetchingDebt && (
                                                 <p className="mb-3 text-xs text-muted-foreground">Đang tải công nợ...</p>
                                             )
                                         )}
+
+                                        <div className="mb-3 flex gap-2">
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                className="flex-1"
+                                                onClick={() => {
+                                                    setDebtDetailCustomer({ id: customer.id, name: customer.name })
+                                                    setDebtDetailDialogOpen(true)
+                                                }}
+                                            >
+                                                Xem chi tiết
+                                            </Button>
+                                            <Button
+                                                size="sm"
+                                                className="flex-1"
+                                                onClick={() => {
+                                                    setPaymentCustomerId(customer.id)
+                                                    setPaymentDialogOpen(true)
+                                                }}
+                                                disabled={!customer.debt_summary?.total_debt}
+                                            >
+                                                Thu nợ
+                                            </Button>
+                                        </div>
+
                                         {customer.address && (
                                             <p className="text-sm text-muted-foreground">📍 {customer.address}</p>
                                         )}

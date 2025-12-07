@@ -2,7 +2,7 @@
  * Payment-related TypeScript types
  */
 
-import { Invoice } from './invoice'
+import type { Invoice } from './index'
 
 export interface PaymentAllocation {
   id: number
@@ -43,6 +43,7 @@ export interface PaymentCreate {
 
 export interface DebtSummary {
   total_debt: number
+  total_revenue: number
   total_invoices: number
   unpaid_invoices: number
   partially_paid_invoices: number

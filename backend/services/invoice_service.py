@@ -1,7 +1,7 @@
 """Invoice management and generation service."""
 
 import os
-from typing import List, Optional, Dict, Tuple
+from typing import List, Optional, Dict, Tuple, Union
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_
@@ -513,7 +513,7 @@ class InvoiceService:
     def search_invoices(
         self,
         customer_id: Optional[int] = None,
-        status: Optional[str] = None,
+        status: Optional[Union[str, List[str]]] = None,
         start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None,
         invoice_number: Optional[str] = None,
@@ -535,7 +535,7 @@ class InvoiceService:
         
         Args:
             customer_id: Filter by customer ID
-            status: Filter by invoice status
+            status: Filter by invoice status (single or list)
             start_date: Filter by start date
             end_date: Filter by end date
             invoice_number: Search by invoice number (partial match)
@@ -544,6 +544,7 @@ class InvoiceService:
             limit: Page size
             offset: Offset for pagination
         """
+        from typing import Union
         from sqlalchemy.orm import joinedload
 
         safe_limit, safe_offset = self._normalize_page_params(limit, offset)
@@ -555,8 +556,12 @@ class InvoiceService:
             base_filters.append(Invoice.customer_id == customer_id)
 
         if status:
-            filters.append(Invoice.status == status)
-            base_filters.append(Invoice.status == status)
+            if isinstance(status, list):
+                filters.append(Invoice.status.in_(status))
+                base_filters.append(Invoice.status.in_(status))
+            else:
+                filters.append(Invoice.status == status)
+                base_filters.append(Invoice.status == status)
 
         if start_date:
             filters.append(Invoice.created_at >= start_date)

@@ -261,6 +261,13 @@ class PaymentService:
             Invoice.remaining_amount > 0
         ).order_by(Invoice.created_at.asc()).all()
 
+        # Calculate total revenue (all non-cancelled invoices)
+        revenue_query = self.db.query(func.sum(Invoice.total)).filter(
+            Invoice.customer_id == customer_id,
+            Invoice.status != 'cancelled'
+        )
+        total_revenue = revenue_query.scalar() or 0.0
+
         # Calculate totals
         total_debt = sum(inv.remaining_amount for inv in invoices)
         unpaid_count = sum(1 for inv in invoices if inv.paid_amount == 0)
@@ -291,7 +298,9 @@ class PaymentService:
 
         return {
             'total_debt': total_debt,
+            'total_revenue': total_revenue,
             'total_invoices': len(invoices),
+
             'unpaid_invoices': unpaid_count,
             'partially_paid_invoices': partially_paid_count,
             'overdue_debt': overdue_debt,

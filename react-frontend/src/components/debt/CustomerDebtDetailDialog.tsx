@@ -1,5 +1,7 @@
 import { useState } from 'react'
-import { Download, FileText, Loader2, AlertCircle } from 'lucide-react'
+import { Download, FileText, Loader2, AlertCircle, Filter, X } from 'lucide-react'
+import { Input } from '@/components/ui/input'
+import { Badge } from '@/components/ui/badge'
 import {
   Dialog,
   DialogContent,
@@ -19,6 +21,7 @@ import {
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { useQuery } from '@tanstack/react-query'
 import { paymentService } from '@/services/payments'
+import { invoiceService } from '@/services/invoices'
 import { debtReportService } from '@/services/debtReports'
 import { PaymentHistoryTable } from '@/components/payments/PaymentHistoryTable'
 import { ReversePaymentDialog } from '@/components/payments/ReversePaymentDialog'
@@ -131,7 +134,6 @@ export function CustomerDebtDetailDialog({
               <TabsTrigger value="aging">Phân tích tuổi nợ</TabsTrigger>
             </TabsList>
 
-            {/* Tab 1: Overview */}
             <TabsContent value="overview" className="space-y-4">
               {isLoadingDebt ? (
                 <div className="flex items-center justify-center py-8">
@@ -140,7 +142,13 @@ export function CustomerDebtDetailDialog({
               ) : debtSummary ? (
                 <>
                   {/* Stats cards */}
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-4 gap-4">
+                    <div className="rounded-lg border p-4 space-y-1">
+                      <p className="text-sm text-muted-foreground">Tổng tiền hàng</p>
+                      <p className="text-2xl font-bold text-blue-600">
+                        {formatCurrency(debtSummary.total_revenue)}
+                      </p>
+                    </div>
                     <div className="rounded-lg border p-4 space-y-1">
                       <p className="text-sm text-muted-foreground">Tổng nợ</p>
                       <p className="text-2xl font-bold text-amber-600">
@@ -253,60 +261,7 @@ export function CustomerDebtDetailDialog({
 
             {/* Tab 2: Invoices */}
             <TabsContent value="invoices" className="space-y-4">
-              {isLoadingDebt ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="h-6 w-6 animate-spin" />
-                </div>
-              ) : debtSummary?.invoices && debtSummary.invoices.length > 0 ? (
-                <div className="rounded-md border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Số hóa đơn</TableHead>
-                        <TableHead>Ngày tạo</TableHead>
-                        <TableHead className="text-right">Tổng tiền</TableHead>
-                        <TableHead className="text-right">Đã thanh toán</TableHead>
-                        <TableHead className="text-right">Còn lại</TableHead>
-                        <TableHead>Trạng thái</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {debtSummary.invoices.map((invoice) => (
-                        <TableRow key={invoice.id}>
-                          <TableCell className="font-medium">{invoice.invoice_number}</TableCell>
-                          <TableCell>{formatDate(invoice.created_at, 'dd/MM/yyyy')}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(invoice.total)}</TableCell>
-                          <TableCell className="text-right text-emerald-600">
-                            {formatCurrency(invoice.paid_amount || 0)}
-                          </TableCell>
-                          <TableCell className="text-right font-semibold text-amber-600">
-                            {formatCurrency(invoice.remaining_amount || 0)}
-                          </TableCell>
-                          <TableCell>
-                            {invoice.payment_status === 'paid' ? (
-                              <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-emerald-100 text-emerald-800">
-                                Đã thanh toán
-                              </span>
-                            ) : invoice.payment_status === 'partial' ? (
-                              <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-800">
-                                Thanh toán một phần
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-800">
-                                Chưa thanh toán
-                              </span>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              ) : (
-                <div className="text-center py-8 text-muted-foreground">
-                  Không có hóa đơn nào chưa thanh toán đủ
-                </div>
-              )}
+              <InvoiceTabContent customerId={customerId} />
             </TabsContent>
 
             {/* Tab 3: Payment History */}
@@ -336,5 +291,169 @@ export function CustomerDebtDetailDialog({
         }}
       />
     </>
+  )
+}
+
+function InvoiceTabContent({ customerId }: { customerId: number }) {
+  const [startDate, setStartDate] = useState<string>('')
+  const [endDate, setEndDate] = useState<string>('')
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([])
+
+  const { data: invoicesResponse, isLoading } = useQuery({
+    queryKey: ['customer-invoices', customerId, startDate, endDate, selectedStatuses],
+    queryFn: () => invoiceService.list({
+      customerId,
+      status: selectedStatuses.length > 0 ? selectedStatuses : undefined,
+      startDate: startDate || undefined,
+      endDate: endDate || undefined,
+      limit: 100 // Load more for detail view
+    }),
+    enabled: !!customerId
+  })
+
+  // Safe check if Response is paginated or direct array, usually it's PaginatedResponse with items
+  const invoices = invoicesResponse?.items || []
+
+  const toggleStatus = (status: string) => {
+    setSelectedStatuses(prev =>
+      prev.includes(status)
+        ? prev.filter(s => s !== status)
+        : [...prev, status]
+    )
+  }
+
+  const statusOptions = [
+    { value: 'processing', label: 'Chờ xử lý', color: 'bg-blue-100 text-blue-800 border-blue-200' },
+    { value: 'pending', label: 'Chờ thanh toán', color: 'bg-gray-100 text-gray-800 border-gray-200' },
+    { value: 'paid', label: 'Đã thanh toán', color: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
+    { value: 'cancelled', label: 'Đã hủy', color: 'bg-red-100 text-red-800 border-red-200' },
+  ]
+
+  return (
+    <div className="space-y-4">
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-4 rounded-md border p-3 bg-slate-50/50">
+        <div className="flex items-center gap-2">
+          <Filter className="h-4 w-4 text-muted-foreground" />
+          <span className="text-sm font-medium">Bộ lọc:</span>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Input
+            type="date"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+            className="h-8 w-[130px] bg-white"
+          />
+          <span className="text-muted-foreground">-</span>
+          <Input
+            type="date"
+            value={endDate}
+            onChange={(e) => setEndDate(e.target.value)}
+            className="h-8 w-[130px] bg-white"
+          />
+        </div>
+
+        <div className="h-4 w-px bg-slate-200 mx-2" />
+
+        <div className="flex flex-wrap gap-2">
+          {statusOptions.map(option => {
+            const isSelected = selectedStatuses.includes(option.value)
+            return (
+              <Badge
+                key={option.value}
+                variant="outline"
+                className={`cursor-pointer transition-all hover:opacity-80 ${isSelected
+                  ? option.color + ' ring-2 ring-offset-1 ring-slate-300'
+                  : 'opacity-50 grayscale bg-white'
+                  }`}
+                onClick={() => toggleStatus(option.value)}
+              >
+                {option.label}
+              </Badge>
+            )
+          })}
+        </div>
+
+        {(startDate || endDate || selectedStatuses.length > 0) && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setStartDate('')
+              setEndDate('')
+              setSelectedStatuses([])
+            }}
+            className="h-8 px-2 ml-auto text-muted-foreground hover:text-foreground"
+          >
+            <X className="mr-1 h-3 w-3" />
+            Xóa bộ lọc
+          </Button>
+        )}
+      </div>
+
+      {isLoading ? (
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className="h-6 w-6 animate-spin" />
+        </div>
+      ) : invoices.length > 0 ? (
+        <div className="rounded-md border max-h-[500px] overflow-auto">
+          <Table>
+            <TableHeader className="sticky top-0 bg-white shadow-sm z-10">
+              <TableRow>
+                <TableHead>Số hóa đơn</TableHead>
+                <TableHead>Ngày tạo</TableHead>
+                <TableHead className="text-right">Tổng tiền</TableHead>
+                <TableHead className="text-right">Đã thanh toán</TableHead>
+                <TableHead className="text-right">Còn lại</TableHead>
+                <TableHead>Trạng thái</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {invoices.map((invoice) => (
+                <TableRow key={invoice.id}>
+                  <TableCell className="font-medium">{invoice.invoice_number}</TableCell>
+                  <TableCell>{formatDate(invoice.created_at, 'dd/MM/yyyy')}</TableCell>
+                  <TableCell className="text-right">{formatCurrency(invoice.total)}</TableCell>
+                  <TableCell className="text-right text-emerald-600">
+                    {formatCurrency(invoice.paid_amount || 0)}
+                  </TableCell>
+                  <TableCell className="text-right font-semibold text-amber-600">
+                    {formatCurrency(invoice.remaining_amount || 0)}
+                  </TableCell>
+                  <TableCell>
+                    {invoice.status === 'paid' ? (
+                      <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-emerald-100 text-emerald-800">
+                        Đã thanh toán
+                      </span>
+                    ) : invoice.status === 'processing' ? (
+                      <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-800">
+                        Đang xử lý
+                      </span>
+                    ) : invoice.status === 'cancelled' ? (
+                      <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-red-100 text-red-800">
+                        Đã hủy
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-800">
+                        Chờ thanh toán
+                      </span>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      ) : (
+        <div className="text-center py-12 border-2 border-dashed rounded-lg bg-slate-50">
+          <FileText className="h-10 w-10 text-muted-foreground mx-auto mb-3 opacity-50" />
+          <p className="text-muted-foreground font-medium">Không tìm thấy hóa đơn nào</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Thử thay đổi bộ lọc hoặc chọn khoảng thời gian khác
+          </p>
+        </div>
+      )}
+    </div>
   )
 }

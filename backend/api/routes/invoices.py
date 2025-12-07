@@ -1,9 +1,9 @@
 from datetime import datetime
 import pytz
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
-from typing import Optional
+from typing import Optional, List
 
 from api.dependencies import get_db
 from schemas.invoice import Invoice, InvoiceCreate, InvoiceStatusUpdate, Statistics, InvoiceUpdate
@@ -36,10 +36,11 @@ def _parse_date(date_str: str, end_of_day: bool = False) -> datetime:
 
 @router.get("/invoices", response_model=PaginatedResponse[Invoice])
 async def get_invoices(
-    status: Optional[str] = None,
+    status: Optional[List[str]] = Query(None),
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     invoice_number: Optional[str] = None,
+    customer_id: Optional[int] = None,
     customer_name: Optional[str] = None,
     customer_phone: Optional[str] = None,
     limit: int = 30,
@@ -55,6 +56,7 @@ async def get_invoices(
         start_date=parsed_start,
         end_date=parsed_end,
         invoice_number=invoice_number,
+        customer_id=customer_id,
         customer_name=customer_name,
         customer_phone=customer_phone,
         limit=limit,

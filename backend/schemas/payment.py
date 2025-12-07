@@ -111,6 +111,7 @@ class PaymentResponse(BaseModel):
 class DebtSummaryResponse(BaseModel):
     """Debt summary response schema."""
     total_debt: float
+    total_revenue: float
     total_invoices: int
     unpaid_invoices: int
     partially_paid_invoices: int

@@ -2,7 +2,8 @@ import api from './api'
 import type { Invoice, InvoiceCreate, InvoiceUpdate, PaginatedResponse, Statistics } from '../types'
 
 type InvoiceListParams = {
-    status?: string
+    customerId?: number
+    status?: string | string[]
     searchQuery?: string
     startDate?: string
     endDate?: string
@@ -22,6 +23,7 @@ export const invoiceService = {
     },
 
     list: async ({
+        customerId,
         status,
         searchQuery,
         startDate,
@@ -29,7 +31,8 @@ export const invoiceService = {
         limit = 20,
         offset = 0,
     }: InvoiceListParams = {}): Promise<PaginatedResponse<Invoice>> => {
-        const params: Record<string, string | number> = { limit, offset }
+        const params: Record<string, string | number | string[]> = { limit, offset }
+        if (customerId) params.customer_id = customerId
         if (status) params.status = status
         if (searchQuery) {
             params.invoice_number = searchQuery
@@ -39,7 +42,24 @@ export const invoiceService = {
         if (startDate) params.start_date = startDate
         if (endDate) params.end_date = endDate
 
-        const response = await api.get('/api/invoices', { params })
+        // Use 'paramsSerializer' or handle array manually if axios doesn't handle repeated keys for arrays by default in the way backend expects (FastAPI handles repeated keys).
+        // Axios default handles arrays as 'status[]=...' which FastAPI doesn't like by default (it wants 'status=...&status=...').
+        // However, we can use qs or just let axios handle it and see.
+        // Actually, simple way for custom serialization if needed:
+        const response = await api.get('/api/invoices', {
+            params,
+            paramsSerializer: (params) => {
+                const searchParams = new URLSearchParams()
+                Object.entries(params).forEach(([key, value]) => {
+                    if (Array.isArray(value)) {
+                        value.forEach(v => searchParams.append(key, v.toString()))
+                    } else if (value !== undefined && value !== null) {
+                        searchParams.append(key, value.toString())
+                    }
+                })
+                return searchParams.toString()
+            }
+        })
         return response.data
     },
 
