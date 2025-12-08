@@ -138,20 +138,34 @@ export interface InvoiceItem {
 }
 
 export interface Statistics {
+    // Invoice counts by status
     total_invoices: number
-    total_revenue: number  // Now includes paid + pending
     paid_invoices: number
     pending_invoices: number
     cancelled_invoices: number
-    pending_revenue: number
-    average_order_value: number
+    processing_invoices: number
 
-    // Enhanced debt tracking
-    collected_amount: number  // Money actually collected
-    outstanding_debt: number  // Money still owed
-    total_debt: number  // Legacy field
-    invoices_with_debt: number
-    customers_with_debt: number  // Count of customers in debt
+    // Export status breakdown (paid + pending only, excluding cancelled/processing)
+    exported_invoices: number  // Overall count of invoices with exported_at set
+    non_exported_invoices: number  // Overall count of invoices without exported_at
+
+    // Pending invoice export breakdown (pending only)
+    pending_exported_invoices: number  // Count of pending invoices that are exported
+    pending_non_exported_invoices: number  // Count of pending invoices that are not exported
+
+    // Revenue totals (simplified - no breakdown by export status)
+    total_revenue: number  // Sum of paid + pending invoice totals
+    collected_amount: number  // Total amount collected (sum of paid_amount)
+    outstanding_debt: number  // Total amount outstanding (sum of remaining_amount)
+
+    // Legacy fields (keep for backward compatibility)
+    pending_revenue: number  // Legacy: revenue from pending invoices only
+    average_order_value: number
+    total_debt: number  // Legacy alias for outstanding_debt
+
+    // Debt tracking
+    invoices_with_debt: number  // Count of invoices with remaining_amount > 0
+    customers_with_debt: number  // Count of distinct customers with debt
 }
 
 export interface CustomerStats {

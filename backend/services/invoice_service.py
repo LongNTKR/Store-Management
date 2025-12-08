@@ -726,6 +726,13 @@ class InvoiceService:
                 f"Vui lòng sử dụng tính năng 'Hoàn trả hóa đơn' thay thế."
             )
 
+        # NEW: Validate cancel exported invoices
+        if status == 'cancelled' and invoice.exported_at is not None:
+             raise ValueError(
+                "Không thể hủy hóa đơn đã xuất file. "
+                "Vui lòng sử dụng tính năng 'Hoàn trả hóa đơn' thay thế."
+            )
+
         # If status is being changed to 'paid', we need to settle the debt
         if status == 'paid' and invoice.remaining_amount > 0.01:
             try:
@@ -1232,26 +1239,31 @@ class InvoiceService:
         end_date: Optional[datetime] = None
     ) -> Dict:
         """
-        Get invoice statistics with debt tracking using SQL aggregation for performance.
+        Get comprehensive invoice statistics with focus on pending invoice analysis.
 
-        Revenue Definitions:
-        - Total Revenue: Sum of all invoice totals (paid + pending, excluding cancelled)
-        - Collected Amount: Sum of paid_amount across all active invoices
-        - Outstanding Debt: Sum of remaining_amount across all active invoices
-        - Customers with Debt: Count of distinct customers with remaining_amount > 0
+        Key Metrics:
+        - Invoice Counts: Total, paid, pending, cancelled, processing
+        - Export Status: Overall exported/non-exported counts
+        - Pending Breakdown: How many pending invoices are exported vs non-exported
+        - Revenue:
+          * Total Revenue: ONLY from exported invoices (paid + pending with exported_at set)
+          * Collected Amount: Sum of paid_amount (all statuses)
+          * Outstanding Debt: Sum of remaining_amount (all statuses)
+        - Debt Tracking: Invoices and customers with outstanding debt
 
         Args:
             start_date: Start date filter
             end_date: End date filter
 
         Returns:
-            Dictionary with statistics
+            Dictionary with statistics focused on pending invoice analysis
         """
         from sqlalchemy import func, case, distinct
 
         filters = []
-        # Only include paid and pending invoices (exclude cancelled and processing)
-        filters.append(Invoice.status.in_(['pending', 'paid']))
+        # NOTE: No status filter - calculate ALL invoice statuses
+        # NOTE: No export filter - calculate both exported and non-exported
+
         if start_date:
             filters.append(Invoice.created_at >= start_date)
         if end_date:
@@ -1263,15 +1275,42 @@ class InvoiceService:
 
         # Use SQL aggregation instead of Python loops for performance
         results = query.with_entities(
+            # Total invoice count (all statuses)
             func.count(Invoice.id).label('total_invoices'),
 
-            # Total revenue = sum of all invoice totals (paid + pending)
-            func.sum(Invoice.total).label('total_revenue'),
+            # Invoice counts by status (all 4 statuses)
+            func.count(case((Invoice.status == 'paid', 1))).label('paid_invoices'),
+            func.count(case((Invoice.status == 'pending', 1))).label('pending_invoices'),
+            func.count(case((Invoice.status == 'cancelled', 1))).label('cancelled_invoices'),
+            func.count(case((Invoice.status == 'processing', 1))).label('processing_invoices'),
 
-            # Collected amount = sum of paid_amount
+            # Export status counts (exclude cancelled and processing)
+            func.count(case((
+                and_(
+                    Invoice.status.in_(['paid', 'pending']),
+                    Invoice.exported_at.isnot(None)
+                ), 1
+            ))).label('exported_invoices'),
+            func.count(case((
+                and_(
+                    Invoice.status.in_(['paid', 'pending']),
+                    Invoice.exported_at.is_(None)
+                ), 1
+            ))).label('non_exported_invoices'),
+
+            # Total revenue = sum of invoice totals (paid + pending AND exported only)
+            func.sum(case((
+                and_(
+                    Invoice.status.in_(['paid', 'pending']),
+                    Invoice.exported_at.isnot(None)
+                ), Invoice.total),
+                else_=0
+            )).label('total_revenue'),
+
+            # Collected amount = sum of paid_amount (all statuses)
             func.sum(Invoice.paid_amount).label('collected_amount'),
 
-            # Outstanding debt = sum of remaining_amount
+            # Outstanding debt = sum of remaining_amount (all statuses)
             func.sum(Invoice.remaining_amount).label('outstanding_debt'),
 
             # Legacy metrics (keep for backward compatibility)
@@ -1284,10 +1323,19 @@ class InvoiceService:
                 else_=0
             )).label('pending_revenue'),
 
-            # Invoice counts by status
-            func.count(case((Invoice.status == 'paid', 1))).label('paid_invoices'),
-            func.count(case((Invoice.status == 'pending', 1))).label('pending_invoices'),
-            func.count(case((Invoice.status == 'cancelled', 1))).label('cancelled_invoices'),
+            # Pending invoice export breakdown (pending only)
+            func.count(case((
+                and_(
+                    Invoice.status == 'pending',
+                    Invoice.exported_at.isnot(None)
+                ), 1
+            ))).label('pending_exported_invoices'),
+            func.count(case((
+                and_(
+                    Invoice.status == 'pending',
+                    Invoice.exported_at.is_(None)
+                ), 1
+            ))).label('pending_non_exported_invoices'),
         ).first()
 
         # Query for customers with debt (separate query for clarity)
@@ -1317,7 +1365,7 @@ class InvoiceService:
         outstanding_debt = float(results.outstanding_debt or 0)
         paid_invoices = results.paid_invoices or 0
 
-        # Count invoices with debt
+        # Count invoices with debt (no export filter)
         invoices_with_debt = self.db.query(Invoice).filter(
             Invoice.status.in_(['pending', 'paid']),
             Invoice.remaining_amount > 0
@@ -1329,15 +1377,23 @@ class InvoiceService:
         invoices_with_debt_count = invoices_with_debt.count()
 
         return {
+            # Invoice counts by status (all 4 statuses)
             'total_invoices': total_invoices,
             'paid_invoices': paid_invoices,
             'pending_invoices': results.pending_invoices or 0,
             'cancelled_invoices': results.cancelled_invoices or 0,
+            'processing_invoices': results.processing_invoices or 0,
 
-            # Total revenue now includes both paid + pending
+            # Export status breakdown (paid + pending only)
+            'exported_invoices': results.exported_invoices or 0,
+            'non_exported_invoices': results.non_exported_invoices or 0,
+
+            # Pending invoice export breakdown (pending only)
+            'pending_exported_invoices': results.pending_exported_invoices or 0,
+            'pending_non_exported_invoices': results.pending_non_exported_invoices or 0,
+
+            # Revenue totals (paid + pending only) - simplified, no breakdown
             'total_revenue': total_revenue,
-
-            # New: Breakdown of collected vs outstanding
             'collected_amount': collected_amount,
             'outstanding_debt': outstanding_debt,
 

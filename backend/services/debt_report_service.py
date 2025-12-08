@@ -184,10 +184,10 @@ class DebtReportService:
         ).order_by(Invoice.created_at.desc()).all()  # Most recent first
 
         # Calculate totals (now includes all invoices, not just unpaid)
-        # Exclude cancelled invoices and unexported invoices from debt calculations
-        total_debt = sum(inv.remaining_amount for inv in invoices if inv.remaining_amount > 0 and inv.status != 'cancelled' and inv.exported_at is not None)
+        # Exclude cancelled/processing and unexported invoices from debt calculations
+        total_debt = sum(inv.remaining_amount for inv in invoices if inv.remaining_amount > 0 and inv.status in ['pending', 'paid'] and inv.exported_at is not None)
         total_invoices = len(invoices)
-        total_unpaid = len([inv for inv in invoices if inv.remaining_amount > 0 and inv.status != 'cancelled' and inv.exported_at is not None])
+        total_unpaid = len([inv for inv in invoices if inv.remaining_amount > 0 and inv.status in ['pending', 'paid'] and inv.exported_at is not None])
 
         # Create PDF filename
         now = get_vn_time()
@@ -453,9 +453,9 @@ class DebtReportService:
         ws_summary['A6'] = f"Số điện thoại: {customer.phone or 'N/A'}"
         ws_summary['A7'] = f"Địa chỉ: {customer.address or 'N/A'}"
 
-        # Only count exported invoices in debt totals
-        total_debt = sum(inv.remaining_amount for inv in invoices if inv.remaining_amount > 0 and inv.exported_at is not None)
-        total_unpaid = len([inv for inv in invoices if inv.remaining_amount > 0 and inv.exported_at is not None])
+        # Only count exported invoices in debt totals, and must be pending or paid
+        total_debt = sum(inv.remaining_amount for inv in invoices if inv.remaining_amount > 0 and inv.status in ['pending', 'paid'] and inv.exported_at is not None)
+        total_unpaid = len([inv for inv in invoices if inv.remaining_amount > 0 and inv.status in ['pending', 'paid'] and inv.exported_at is not None])
 
         ws_summary['A9'] = "Tổng công nợ:"
         ws_summary['A9'].font = Font(bold=True, size=12)

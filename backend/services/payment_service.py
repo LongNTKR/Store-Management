@@ -118,12 +118,11 @@ class PaymentService:
 
         else:
             # Full auto: FIFO on all unpaid invoices
-            # Include 'processing', 'pending', and 'paid' (exclude only 'cancelled')
-            # Only include exported invoices (exported_at IS NOT NULL)
-            # Unexported invoices are not valid for payment as they haven't been delivered to customer
+            # STATUS: Only 'pending' or 'paid' (exclude 'processing' and 'cancelled')
+            # EXPORT: Only exported invoices (exported_at IS NOT NULL)
             invoices = self.db.query(Invoice).filter(
                 Invoice.customer_id == customer_id,
-                Invoice.status.in_(['processing', 'pending', 'paid']),
+                Invoice.status.in_(['pending', 'paid']),
                 Invoice.remaining_amount > 0,
                 Invoice.exported_at.isnot(None)  # Only exported invoices
             ).order_by(Invoice.created_at.asc()).all()
@@ -257,19 +256,21 @@ class PaymentService:
             raise ValueError(f"Không tìm thấy khách hàng với ID {customer_id}")
 
         # Get all invoices with remaining debt
-        # Include 'processing', 'pending', and 'paid' status (exclude only 'cancelled')
-        # Only include exported invoices (exported_at IS NOT NULL)
+        # STATUS: Only 'pending' or 'paid' (exclude 'processing' and 'cancelled')
+        # EXPORT: Only exported invoices (exported_at IS NOT NULL)
         invoices = self.db.query(Invoice).filter(
             Invoice.customer_id == customer_id,
-            Invoice.status.in_(['processing', 'pending', 'paid']),
+            Invoice.status.in_(['pending', 'paid']),
             Invoice.remaining_amount > 0,
             Invoice.exported_at.isnot(None)  # Only count exported invoices in debt
         ).order_by(Invoice.created_at.asc()).all()
 
-        # Calculate total revenue (all non-cancelled invoices)
+        # Calculate total revenue (only exported invoices with pending/paid status)
+        # Must match debt calculation rules: exported_at IS NOT NULL + status in ['pending', 'paid']
         revenue_query = self.db.query(func.sum(Invoice.total)).filter(
             Invoice.customer_id == customer_id,
-            Invoice.status != 'cancelled'
+            Invoice.status.in_(['pending', 'paid']),
+            Invoice.exported_at.isnot(None)
         )
         total_revenue = revenue_query.scalar() or 0.0
 

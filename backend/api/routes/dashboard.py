@@ -39,10 +39,23 @@ async def get_dashboard_data(db: Session = Depends(get_db)):
     stats = DashboardStats(
         total_products=len([p for p in products if p.is_active]),
         total_customers=len([c for c in customers if c.is_active]),
+
+        # Invoice counts by status
         total_invoices=invoice_stats.get('total_invoices', 0),
         paid_invoices=invoice_stats.get('paid_invoices', 0),
         pending_invoices=invoice_stats.get('pending_invoices', 0),
         cancelled_invoices=invoice_stats.get('cancelled_invoices', 0),
+        processing_invoices=invoice_stats.get('processing_invoices', 0),
+
+        # Export status breakdown
+        exported_invoices=invoice_stats.get('exported_invoices', 0),
+        non_exported_invoices=invoice_stats.get('non_exported_invoices', 0),
+
+        # Pending invoice export breakdown
+        pending_exported_invoices=invoice_stats.get('pending_exported_invoices', 0),
+        pending_non_exported_invoices=invoice_stats.get('pending_non_exported_invoices', 0),
+
+        # Revenue (simplified)
         total_revenue=invoice_stats.get('total_revenue', 0),
         pending_revenue=invoice_stats.get('pending_revenue', 0),
         average_order_value=invoice_stats.get('average_order_value', 0),

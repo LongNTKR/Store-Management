@@ -112,17 +112,31 @@ class Invoice(BaseModel):
 
 
 class Statistics(BaseModel):
+    # Invoice counts by status
     total_invoices: int
-    total_revenue: float  # Now includes paid + pending invoices
     paid_invoices: int
     pending_invoices: int
     cancelled_invoices: int
-    pending_revenue: float  # Legacy: revenue from pending invoices only
-    average_order_value: float
+    processing_invoices: int = 0
 
-    # Enhanced debt tracking
+    # Export status breakdown (paid + pending only, excluding cancelled/processing)
+    exported_invoices: int = 0  # Overall count of invoices with exported_at set
+    non_exported_invoices: int = 0  # Overall count of invoices without exported_at
+
+    # Pending invoice export breakdown (pending only)
+    pending_exported_invoices: int = 0  # Count of pending invoices that are exported
+    pending_non_exported_invoices: int = 0  # Count of pending invoices that are not exported
+
+    # Revenue totals (simplified - no breakdown by export status)
+    total_revenue: float  # Sum of paid + pending invoice totals
     collected_amount: float = 0  # Total amount collected (sum of paid_amount)
     outstanding_debt: float = 0  # Total amount outstanding (sum of remaining_amount)
+
+    # Legacy fields (keep for backward compatibility)
+    pending_revenue: float  # Legacy: revenue from pending invoices only
+    average_order_value: float
     total_debt: float = 0  # Legacy alias for outstanding_debt
+
+    # Debt tracking
     invoices_with_debt: int = 0  # Count of invoices with remaining_amount > 0
     customers_with_debt: int = 0  # Count of distinct customers with debt

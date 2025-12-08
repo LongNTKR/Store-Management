@@ -15,6 +15,7 @@ import { InvoiceDetailsDialog } from '@/components/invoices/InvoiceDetailsDialog
 import { SearchHighlight } from '@/components/shared/SearchHighlight'
 import { CreateInvoiceDialog } from '@/components/invoices/CreateInvoiceDialog'
 import { RecordPaymentDialog } from '@/components/payments/RecordPaymentDialog'
+import { toast } from 'sonner'
 
 const statusStyles: Record<Invoice['status'], string> = {
     pending: 'bg-amber-100 text-amber-800',
@@ -99,8 +100,19 @@ export function InvoicesPage() {
         }
     }
 
-    const handleStatusUpdate = (invoiceId: number, newStatus: Invoice['status']) => {
-        updateStatusMutation.mutate({ id: invoiceId, status: newStatus })
+    const handleStatusUpdate = (invoice: Invoice, newStatus: Invoice['status']) => {
+        updateStatusMutation.mutate(
+            { id: invoice.id, status: newStatus },
+            {
+                onSuccess: () => {
+                    // Specific logic for marking unexported invoice as 'paid'
+                    if (newStatus === 'paid' && !invoice.exported_at) {
+                        toast.info('Đang tự động xuất hóa đơn PDF...')
+                        handleDownload(invoice.id, 'pdf')
+                    }
+                }
+            }
+        )
     }
 
     return (
@@ -213,7 +225,7 @@ export function InvoicesPage() {
                                 </div>
                                 <Select
                                     value={invoice.status}
-                                    onValueChange={(newStatus: Invoice['status']) => handleStatusUpdate(invoice.id, newStatus)}
+                                    onValueChange={(newStatus: Invoice['status']) => handleStatusUpdate(invoice, newStatus)}
                                     disabled={updateStatusMutation.isPending || ['paid', 'cancelled', 'processing'].includes(invoice.status)}
                                     onOpenChange={(open) => {
                                         // Prevent card click when interacting with select
@@ -234,8 +246,14 @@ export function InvoicesPage() {
                                         <SelectItem value="paid">Đã thanh toán</SelectItem>
                                         <SelectItem
                                             value="cancelled"
-                                            disabled={invoice.paid_amount > 0}
-                                            title={invoice.paid_amount > 0 ? 'Không thể hủy hóa đơn đã thanh toán. Vui lòng dùng tính năng Hoàn trả.' : undefined}
+                                            disabled={invoice.paid_amount > 0 || (!!invoice.exported_at)}
+                                            title={
+                                                invoice.paid_amount > 0
+                                                    ? 'Không thể hủy hóa đơn đã thanh toán. Vui lòng dùng tính năng Hoàn trả.'
+                                                    : invoice.exported_at
+                                                        ? 'Không thể hủy hóa đơn đã xuất file. Vui lòng dùng tính năng Hoàn trả.'
+                                                        : undefined
+                                            }
                                         >
                                             Đã hủy
                                         </SelectItem>

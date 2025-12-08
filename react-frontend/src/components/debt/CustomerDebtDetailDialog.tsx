@@ -414,7 +414,8 @@ function InvoiceTabContent({ customerId }: { customerId: number }) {
           <Loader2 className="h-6 w-6 animate-spin" />
         </div>
       ) : combinedList.length > 0 ? (
-        <div className="rounded-md border flex-1 overflow-auto">\n          <Table>
+        <div className="rounded-md border flex-1 overflow-auto">          
+        <Table>
           <TableHeader className="sticky top-0 bg-white shadow-sm z-10">
             <TableRow>
               <TableHead>Số phiếu</TableHead>

@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { useDashboard } from '../hooks/useDashboard'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { formatCurrency, formatDate } from '@/lib/utils'
-import { Package, Users, FileText, DollarSign, Upload, PlusCircle, FilePlus } from 'lucide-react'
+import { Upload, PlusCircle, FilePlus } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { CreateInvoiceDialog } from '@/components/invoices/CreateInvoiceDialog'
 import type { Invoice } from '@/types'
@@ -14,31 +14,7 @@ export function HomePage() {
     const [showCreateInvoiceDialog, setShowCreateInvoiceDialog] = useState(false)
 
     // Extract data from unified dashboard response
-    const stats = dashboard?.stats
     const invoices = dashboard?.recent_invoices
-
-    const metrics = [
-        {
-            title: '📦 Sản phẩm',
-            value: stats?.total_products || 0,
-            icon: Package,
-        },
-        {
-            title: '👥 Khách hàng',
-            value: stats?.total_customers || 0,
-            icon: Users,
-        },
-        {
-            title: '🧾 Hóa đơn',
-            value: stats?.total_invoices || 0,
-            icon: FileText,
-        },
-        {
-            title: '💰 Doanh thu',
-            value: formatCurrency(stats?.total_revenue || 0),
-            icon: DollarSign,
-        },
-    ]
 
     const statusLabels: Record<Invoice['status'], string> = {
         pending: 'Chưa thanh toán',
@@ -64,23 +40,6 @@ export function HomePage() {
                     Voi Store
                 </h1>
             </div>
-
-            {/* Quick Stats */}
-            <div className="mb-8 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                {metrics.map((metric) => (
-                    <Card key={metric.title}>
-                        <CardHeader className=" flex flex-row items-center justify-between gap-2">
-                            <CardTitle className="">{metric.title}</CardTitle>
-                            <metric.icon className="text-muted-foreground !mt-0" />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold">{metric.value}</div>
-                        </CardContent>
-                    </Card>
-                ))}
-            </div>
-
-            <hr className="my-8" />
 
             {/* Recent Invoices */}
             <h2 className="mb-4 text-2xl font-bold">📋 Hóa Đơn Gần Đây</h2>

@@ -141,7 +141,7 @@ async def get_aging_analysis(
 
         invoices = db.query(Invoice).filter(
             Invoice.customer_id == customer_id,
-            Invoice.status.in_(['processing', 'pending', 'paid']),
+            Invoice.status.in_(['pending', 'paid']),
             Invoice.remaining_amount > 0,
             Invoice.exported_at.isnot(None)  # Only include exported invoices in debt analysis
         ).order_by(Invoice.created_at.asc()).all()
@@ -150,7 +150,7 @@ async def get_aging_analysis(
     else:
         # All customers analysis
         invoices = db.query(Invoice).filter(
-            Invoice.status.in_(['processing', 'pending', 'paid']),
+            Invoice.status.in_(['pending', 'paid']),
             Invoice.remaining_amount > 0,
             Invoice.exported_at.isnot(None)  # Only include exported invoices in debt analysis
         ).order_by(Invoice.created_at.asc()).all()

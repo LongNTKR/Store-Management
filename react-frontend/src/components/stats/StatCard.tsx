@@ -6,16 +6,20 @@ interface StatCardProps {
     value: string | number
     icon: LucideIcon
     description?: string
-    variant?: "default" | "blue" | "emerald" | "amber" | "rose" | "indigo"
+    variant?: "default" | "blue" | "emerald" | "amber" | "rose" | "indigo" | "slate" | "orange" | "green" | "red"
     className?: string
 }
 
 const variants = {
     default: "text-slate-600 bg-slate-50",
+    slate: "text-slate-600 bg-slate-50",
     blue: "text-blue-600 bg-blue-50",
     emerald: "text-emerald-600 bg-emerald-50",
+    green: "text-green-600 bg-green-50",
     amber: "text-amber-600 bg-amber-50",
+    orange: "text-orange-600 bg-orange-50",
     rose: "text-rose-600 bg-rose-50",
+    red: "text-red-600 bg-red-50",
     indigo: "text-indigo-600 bg-indigo-50",
 }
 

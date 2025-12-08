@@ -5,12 +5,18 @@ import { useStatistics } from '@/hooks/useInvoices'
 import { useProducts } from '@/hooks/useProducts'
 import { useCustomers } from '@/hooks/useCustomers'
 import { formatCurrency } from '@/lib/utils'
-import { Box, Users, FileText, BadgeDollarSign, FilterX, CalendarRange } from 'lucide-react'
+import {
+    Box, Users, FileText, BadgeDollarSign, FilterX, CalendarRange,
+    CheckCircle2, Clock, XCircle, Settings, FileCheck, FileWarning,
+    DollarSign, Wallet, TrendingUp, FileX
+} from 'lucide-react'
 
 // New Components
 import { StatCard } from '@/components/stats/StatCard'
 import { RevenueChart } from '@/components/stats/RevenueChart'
 import { PaymentStatusChart } from '@/components/stats/PaymentStatusChart'
+import { InvoiceStatusChart } from '@/components/stats/InvoiceStatusChart'
+import { PendingInvoiceBreakdownChart } from '@/components/stats/PendingInvoiceBreakdownChart'
 import { TopDebtorsList } from '@/components/stats/TopDebtorsList'
 import { CustomerDebtDetailDialog } from '@/components/debt/CustomerDebtDetailDialog'
 
@@ -90,61 +96,99 @@ export function StatsPage() {
                 </div>
             </div>
 
-            {/* KPI Grid */}
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-                <StatCard
-                    title="Doanh thu"
-                    value={formatCurrency(stats?.total_revenue || 0)}
-                    icon={BadgeDollarSign}
-                    description="Tổng doanh thu trong kỳ"
-                    variant="emerald"
-                />
-                <StatCard
-                    title="Hóa đơn"
-                    value={totalInvoices}
-                    icon={FileText}
-                    description="Đơn hàng đã tạo"
-                    variant="blue"
-
-                />
-                <StatCard
-                    title="Khách hàng"
-                    value={totalCustomers}
-                    icon={Users}
-                    description="Tổng số khách hàng"
-                    variant="indigo"
-                />
-                <StatCard
-                    title="Sản phẩm"
-                    value={totalProducts}
-                    icon={Box}
-                    description="Sản phẩm đang quản lý"
-                    variant="amber"
-                />
+            {/* NHÓM 1: Tổng quan hệ thống (compact) */}
+            <div className="flex items-center gap-6 px-4 py-3 bg-slate-50 rounded-lg border border-slate-200">
+                <h2 className="text-sm font-semibold text-slate-600">📊 Tổng quan:</h2>
+                <div className="flex items-center gap-2">
+                    <Box className="w-4 h-4 text-amber-600" />
+                    <span className="text-sm font-medium text-slate-700">{totalProducts} Sản phẩm</span>
+                </div>
+                <div className="flex items-center gap-2">
+                    <Users className="w-4 h-4 text-indigo-600" />
+                    <span className="text-sm font-medium text-slate-700">{totalCustomers} Khách hàng</span>
+                </div>
             </div>
 
-            {/* Charts & Details Section */}
-            <div className="grid gap-6 md:grid-cols-7 lg:grid-cols-7 items-start">
-                {/* Visualizations - Takes up 5 columns */}
-                <div className="md:col-span-4 lg:col-span-5 space-y-6">
-                    <div className="grid gap-6 md:grid-cols-2">
-                        <RevenueChart
-                            collectedAmount={stats?.collected_amount || 0}
-                            outstandingDebt={stats?.outstanding_debt || 0}
-                        />
-                        <PaymentStatusChart
-                            paid={stats?.paid_invoices || 0}
-                            pending={stats?.pending_invoices || 0}
-                            cancelled={stats?.cancelled_invoices || 0}
-                        />
+            {/* NHÓM 2: Phân tích doanh thu (MỞ RỘNG - quan trọng nhất) */}
+            <div className="p-6 bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl border-2 border-emerald-200 shadow-lg">
+                <div className="flex items-center gap-3 mb-6">
+                    <div className="p-2 bg-emerald-500 rounded-lg">
+                        <BadgeDollarSign className="w-6 h-6 text-white" />
+                    </div>
+                    <h2 className="text-2xl font-bold text-emerald-900">💰 Phân tích doanh thu</h2>
+                </div>
+
+                {/* Revenue Summary Cards */}
+                <div className="grid gap-6 md:grid-cols-3 mb-6">
+                    <div className="p-6 bg-white rounded-xl shadow-md border-2 border-emerald-300 hover:shadow-xl transition-shadow">
+                        <div className="flex items-center justify-between mb-3">
+                            <p className="text-sm font-semibold text-slate-600 uppercase tracking-wide">Tổng doanh thu</p>
+                            <BadgeDollarSign className="w-5 h-5 text-emerald-600" />
+                        </div>
+                        <p className="text-3xl font-bold text-emerald-700 mb-2">{formatCurrency(stats?.total_revenue || 0)}</p>
+                        <p className="text-xs text-slate-500 leading-relaxed">Tổng giá trị các hóa đơn đã xuất file (đã thanh toán + chờ thanh toán)</p>
+                    </div>
+                    <div className="p-6 bg-white rounded-xl shadow-md border-2 border-green-300 hover:shadow-xl transition-shadow">
+                        <div className="flex items-center justify-between mb-3">
+                            <p className="text-sm font-semibold text-slate-600 uppercase tracking-wide">Đã thu về</p>
+                            <Wallet className="w-5 h-5 text-green-600" />
+                        </div>
+                        <p className="text-3xl font-bold text-green-700 mb-2">{formatCurrency(stats?.collected_amount || 0)}</p>
+                        <p className="text-xs text-slate-500">Số tiền đã thu được từ khách hàng</p>
+                    </div>
+                    <div className="p-6 bg-white rounded-xl shadow-md border-2 border-amber-300 hover:shadow-xl transition-shadow">
+                        <div className="flex items-center justify-between mb-3">
+                            <p className="text-sm font-semibold text-slate-600 uppercase tracking-wide">Còn nợ</p>
+                            <TrendingUp className="w-5 h-5 text-amber-600" />
+                        </div>
+                        <p className="text-3xl font-bold text-amber-700 mb-2">{formatCurrency(stats?.outstanding_debt || 0)}</p>
+                        <p className="text-xs text-slate-500">Số tiền còn phải thu từ khách hàng</p>
                     </div>
                 </div>
 
-                {/* Top Debtors List - Takes up 2 columns */}
-                <div className="md:col-span-3 lg:col-span-2">
-                    <TopDebtorsList
-                        currentDateRange={dateRange}
-                        onDebtorClick={handleDebtorClick}
+                {/* Revenue Charts - Integrated within Revenue Section */}
+                <div className="grid gap-6 md:grid-cols-7 lg:grid-cols-7 items-start">
+                    <div className="md:col-span-4 lg:col-span-5">
+                        <div className="grid gap-6 md:grid-cols-2">
+                            <RevenueChart
+                                collectedAmount={stats?.collected_amount || 0}
+                                outstandingDebt={stats?.outstanding_debt || 0}
+                            />
+                            <PaymentStatusChart
+                                paid={stats?.paid_invoices || 0}
+                                pending={stats?.pending_invoices || 0}
+                                cancelled={stats?.cancelled_invoices || 0}
+                            />
+                        </div>
+                    </div>
+                    <div className="md:col-span-3 lg:col-span-2">
+                        <TopDebtorsList
+                            currentDateRange={dateRange}
+                            onDebtorClick={handleDebtorClick}
+                        />
+                    </div>
+                </div>
+            </div>
+
+            {/* NHÓM 3: Thống kê hóa đơn (compact) */}
+            <div className="pt-6 border-t-2 border-slate-200">
+                <h2 className="text-base font-semibold text-slate-700 mb-4 flex items-center gap-2">
+                    <FileText className="w-5 h-5 text-slate-600" />
+                    🧾 Thống kê hóa đơn
+                </h2>
+                <div className="grid gap-4 md:grid-cols-2">
+                    {/* Invoice Status Chart */}
+                    <InvoiceStatusChart
+                        total={totalInvoices}
+                        paid={stats?.paid_invoices || 0}
+                        pending={stats?.pending_invoices || 0}
+                        cancelled={stats?.cancelled_invoices || 0}
+                        processing={stats?.processing_invoices || 0}
+                    />
+                    {/* Pending Invoice Breakdown Chart */}
+                    <PendingInvoiceBreakdownChart
+                        pendingExported={stats?.pending_exported_invoices || 0}
+                        pendingNonExported={stats?.pending_non_exported_invoices || 0}
                     />
                 </div>
             </div>

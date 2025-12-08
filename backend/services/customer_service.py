@@ -466,7 +466,8 @@ class CustomerService:
             Total amount spent
         """
         invoices = self.get_customer_invoices(customer_id)
-        return sum(invoice.total for invoice in invoices if invoice.status == 'paid')
+        # Only count 'paid' invoices that have been exported
+        return sum(invoice.total for invoice in invoices if invoice.status == 'paid' and invoice.exported_at is not None)
 
     def get_customer_stats(self, customer_id: int) -> dict:
         """
@@ -481,9 +482,14 @@ class CustomerService:
         invoices = self.get_customer_invoices(customer_id)
 
         total_invoices = len(invoices)
-        paid_invoices = len([inv for inv in invoices if inv.status == 'paid'])
-        pending_invoices = len([inv for inv in invoices if inv.status == 'pending'])
-        total_spent = sum(inv.total for inv in invoices if inv.status == 'paid')
+        # Filter for stats: Only exported invoices count for paid/pending metrics
+        # Note: total_invoices includes all (raw count), but financial metrics should be strict?
+        # User requirement: "chỉ những hóa đơn đã được xuất hóa đơn mới được tính vào công nợ"
+        # Since 'pending_invoices' often implies 'outstanding orders', we should align it with debt.
+        
+        paid_invoices = len([inv for inv in invoices if inv.status == 'paid' and inv.exported_at is not None])
+        pending_invoices = len([inv for inv in invoices if inv.status == 'pending' and inv.exported_at is not None])
+        total_spent = sum(inv.total for inv in invoices if inv.status == 'paid' and inv.exported_at is not None)
 
         return {
             'total_invoices': total_invoices,
