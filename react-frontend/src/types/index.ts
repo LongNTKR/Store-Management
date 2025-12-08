@@ -122,6 +122,7 @@ export interface Invoice {
     notes?: string
     created_at: string
     updated_at: string
+    exported_at?: string | null  // Track when invoice was first exported to PDF or Excel
     items: InvoiceItem[]
 }
 

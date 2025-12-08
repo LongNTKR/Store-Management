@@ -104,6 +104,7 @@ class Invoice(BaseModel):
     notes: Optional[str] = None
     created_at: datetime
     updated_at: datetime
+    exported_at: Optional[datetime] = None  # Track when invoice was first exported to PDF or Excel
     items: List[InvoiceItem] = []
 
     class Config:

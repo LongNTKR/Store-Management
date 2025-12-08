@@ -194,6 +194,7 @@ class Invoice(Base):
     # Metadata (using UTC+7 timezone)
     created_at = Column(DateTime, default=get_vn_time, index=True)
     updated_at = Column(DateTime, default=get_vn_time, onupdate=get_vn_time)
+    exported_at = Column(DateTime, nullable=True, index=True)  # First export timestamp (PDF or Excel)
 
     # Relationships
     customer = relationship('Customer', back_populates='invoices')

@@ -439,6 +439,21 @@ class InvoiceService:
         if target_status not in ALLOWED_STATUSES:
             raise ValueError("Trạng thái hóa đơn không hợp lệ.")
 
+        # Prevent editing invoices with any payment (partial or full)
+        if invoice.paid_amount > 0:
+            raise ValueError(
+                f"Không thể chỉnh sửa hóa đơn đã có thanh toán ({invoice.paid_amount:,.0f}đ). "
+                "Vui lòng sử dụng tính năng 'Hoàn trả hóa đơn' nếu cần điều chỉnh."
+            )
+
+        # Prevent editing invoices that have been exported
+        if invoice.exported_at is not None:
+            export_date = invoice.exported_at.strftime('%d/%m/%Y %H:%M')
+            raise ValueError(
+                f"Không thể chỉnh sửa hóa đơn đã xuất file ({export_date}). "
+                "Hóa đơn đã xuất là tài liệu chính thức không được phép sửa đổi."
+            )
+
         if current_status in ['paid', 'cancelled']:
             raise ValueError("Chỉ có thể chỉnh sửa hóa đơn ở trạng thái chờ thanh toán hoặc chờ xử lý.")
 
@@ -781,6 +796,12 @@ class InvoiceService:
         if not invoice:
             raise ValueError(f"Invoice {invoice_id} not found")
 
+        # Set exported_at on first export
+        if invoice.exported_at is None:
+            invoice.exported_at = get_vn_time()
+            self.db.commit()
+            self.db.refresh(invoice)
+
         # Create PDF filename
         pdf_filename = f"{invoice.invoice_number}.pdf"
         pdf_path = os.path.join(self.output_dir, pdf_filename)
@@ -1072,6 +1093,12 @@ class InvoiceService:
         invoice = self.get_invoice(invoice_id)
         if not invoice:
             raise ValueError(f"Invoice {invoice_id} not found")
+
+        # Set exported_at on first export
+        if invoice.exported_at is None:
+            invoice.exported_at = get_vn_time()
+            self.db.commit()
+            self.db.refresh(invoice)
 
         # Create Excel filename
         excel_filename = f"{invoice.invoice_number}.xlsx"

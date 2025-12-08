@@ -83,6 +83,9 @@ export function InvoicesPage() {
             link.download = type === 'pdf' ? `invoice_${invoiceId}.pdf` : `invoice_${invoiceId}.xlsx`
             link.click()
             URL.revokeObjectURL(url)
+
+            // Invalidate queries to refresh invoice data with updated exported_at
+            queryClient.invalidateQueries({ queryKey: ['invoices'] })
         } catch (error: any) {
             console.error('Failed to download invoice:', error)
             // Show user-friendly error message
@@ -293,8 +296,20 @@ export function InvoicesPage() {
                                             e.stopPropagation()
                                             setEditingInvoice(invoice)
                                         }}
-                                        disabled={['paid', 'cancelled'].includes(invoice.status)}
-                                        title={['paid', 'cancelled'].includes(invoice.status) ? 'Chỉ chỉnh sửa hóa đơn chờ thanh toán hoặc chờ xử lý' : ''}
+                                        disabled={
+                                            ['paid', 'cancelled'].includes(invoice.status) ||
+                                            invoice.paid_amount > 0 ||
+                                            invoice.exported_at !== null && invoice.exported_at !== undefined
+                                        }
+                                        title={
+                                            invoice.exported_at
+                                                ? `Không thể sửa hóa đơn đã xuất file (${formatDate(invoice.exported_at, 'dd/MM/yyyy HH:mm')})`
+                                                : invoice.paid_amount > 0
+                                                    ? 'Không thể sửa hóa đơn đã có thanh toán. Sử dụng tính năng Hoàn trả nếu cần điều chỉnh.'
+                                                    : ['paid', 'cancelled'].includes(invoice.status)
+                                                        ? 'Chỉ chỉnh sửa hóa đơn chờ thanh toán hoặc chờ xử lý'
+                                                        : ''
+                                        }
                                     >
                                         <Pencil className="mr-2 h-4 w-4" />
                                         Sửa
