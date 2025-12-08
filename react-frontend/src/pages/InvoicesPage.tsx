@@ -286,6 +286,14 @@ export function InvoicesPage() {
                                                 Đã hoàn trả
                                             </span>
                                         )}
+                                        {(!invoice.exported_at) && (
+                                            <span
+                                                className="inline-block px-2 py-0.5 text-xs rounded-full bg-gray-100 text-gray-700 border border-gray-300"
+                                                title="Hóa đơn này chưa được xuất PDF/Excel và chưa được tính vào công nợ"
+                                            >
+                                                Chưa xuất hóa đơn
+                                            </span>
+                                        )}
                                     </div>
                                 </div>
                                 <div className="flex gap-2">
@@ -331,7 +339,7 @@ export function InvoicesPage() {
                                         )}
                                         PDF
                                     </Button>
-                                    {invoice.remaining_amount > 0 && invoice.customer_id && invoice.status !== 'cancelled' && (
+                                    {invoice.remaining_amount > 0 && invoice.customer_id && invoice.status !== 'cancelled' && invoice.status !== 'processing' && (
                                         <Button
                                             variant="default"
                                             size="sm"
@@ -340,6 +348,8 @@ export function InvoicesPage() {
                                                 setPaymentCustomerId(invoice.customer_id!)
                                                 setPaymentDialogOpen(true)
                                             }}
+                                            disabled={!invoice.exported_at}
+                                            title={!invoice.exported_at ? 'Bạn cần xuất hóa đơn để có thể thu nợ' : undefined}
                                         >
                                             Thu nợ
                                         </Button>

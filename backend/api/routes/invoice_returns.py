@@ -106,6 +106,34 @@ async def get_available_return_quantities(
     return [AvailableReturnQuantity(**q) for q in quantities]
 
 
+@router.get("/customers/{customer_id}/returns", response_model=List[InvoiceReturnResponse])
+async def get_customer_returns(
+    customer_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Get all returns for a specific customer.
+
+    Args:
+        customer_id: Customer ID
+
+    Returns:
+        List of invoice returns
+    """
+    service = InvoiceReturnService(db)
+    returns = service.get_customer_returns(customer_id)
+
+    # Populate invoice_number for each return
+    response = []
+    for ret in returns:
+        ret_data = InvoiceReturnResponse.model_validate(ret)
+        if ret.invoice:
+            ret_data.invoice_number = ret.invoice.invoice_number
+        response.append(ret_data)
+
+    return response
+
+
 @router.get("/returns/{return_id}", response_model=InvoiceReturnResponse)
 async def get_return(
     return_id: int,

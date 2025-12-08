@@ -146,7 +146,7 @@ class ProductService:
         description: Optional[str] = None,
         category: Optional[str] = None,
         unit_id: int = 1,  # Default to first unit ("cái")
-        stock_quantity: int = 0,
+        stock_quantity: float = 0,
         image_paths: Optional[List[str]] = None
     ) -> Product:
         """
@@ -545,7 +545,7 @@ class ProductService:
         description: Optional[str] = None,
         category: Optional[str] = None,
         unit_id: Optional[int] = None,
-        stock_quantity: Optional[int] = None,
+        stock_quantity: Optional[float] = None,
         image_paths: Optional[List[str]] = None,
         price_change_reason: str = "Manual update"
     ) -> Optional[Product]:

@@ -45,5 +45,15 @@ export function getProductImageUrl(path?: string): string {
         return `${trimmedBase}/${normalizedPath}`
     }
 
+
     return `${trimmedBase}/images/products/${normalizedPath}`
+}
+
+export function isIntegerUnit(unit: string): boolean {
+    if (!unit) return false;
+    const integerUnits = [
+        'cái', 'chiếc', 'bộ', 'hộp', 'thùng',
+        'viên', 'chai', 'lọ', 'hũ', 'gói', 'bao', 'con'
+    ];
+    return integerUnits.includes(unit.trim().toLowerCase());
 }

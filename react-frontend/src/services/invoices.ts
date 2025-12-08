@@ -1,5 +1,5 @@
 import api from './api'
-import type { Invoice, InvoiceCreate, InvoiceUpdate, PaginatedResponse, Statistics } from '../types'
+import type { Invoice, InvoiceCreate, InvoiceUpdate, PaginatedResponse, Statistics, InvoiceReturn } from '../types'
 
 type InvoiceListParams = {
     customerId?: number
@@ -89,6 +89,11 @@ export const invoiceService = {
 
     getStatistics: async (params?: { start_date?: string; end_date?: string }): Promise<Statistics> => {
         const response = await api.get('/api/stats', { params })
+        return response.data
+    },
+
+    getReturnsByCustomer: async (customerId: number): Promise<InvoiceReturn[]> => {
+        const response = await api.get(`/api/customers/${customerId}/returns`)
         return response.data
     },
 }

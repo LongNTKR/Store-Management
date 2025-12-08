@@ -26,6 +26,7 @@ export interface InvoiceReturn {
   created_at: string;
   created_by: string | null;
   notes: string | null;
+  exported_at: string | null;  // First export timestamp (PDF)
   return_items: InvoiceReturnItem[];
 }
 
@@ -53,5 +54,6 @@ export interface AvailableReturnQuantity {
   already_returned: number;
   available_for_return: number;
   unit: string;
+  allows_decimal: boolean;
   product_price: number;
 }

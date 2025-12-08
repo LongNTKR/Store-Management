@@ -5,7 +5,7 @@ import type { InvoiceCreate, InvoiceUpdate } from '../types'
 
 const INVOICE_PAGE_SIZE = 15
 
-export function useInvoices(status?: string, searchQuery?: string, startDate?: string, endDate?: string, refetchInterval = 5000) {
+export function useInvoices(status?: string, searchQuery?: string, startDate?: string, endDate?: string, refetchInterval: number | false = false) {
     const trimmedSearch = (searchQuery || '').trim()
 
     return useInfiniteQuery({
@@ -62,7 +62,7 @@ export function useUpdateInvoiceStatus() {
     return useMutation({
         mutationFn: ({ id, status }: { id: number; status: string }) =>
             invoiceService.updateStatus(id, status),
-        onSuccess: () => {
+        onSuccess: (data) => {
             // Invalidate invoices list
             queryClient.invalidateQueries({ queryKey: ['invoices'] })
             // Invalidate dashboard data to sync HomePage
@@ -77,6 +77,13 @@ export function useUpdateInvoiceStatus() {
             queryClient.invalidateQueries({ queryKey: ['aging-analysis'] })
             // Invalidate invoice payments (for details dialog)
             queryClient.invalidateQueries({ queryKey: ['invoice-payments'] })
+
+            // Invalidate customer specific queries
+            if (data.customer_id) {
+                queryClient.invalidateQueries({ queryKey: ['customer-payment-history', data.customer_id] })
+                queryClient.invalidateQueries({ queryKey: ['customer-invoices', data.customer_id] })
+                queryClient.invalidateQueries({ queryKey: ['customer-returns', data.customer_id] })
+            }
 
             toast.success('Cập nhật trạng thái thành công!')
         },

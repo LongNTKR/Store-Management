@@ -45,7 +45,11 @@ export function RecordPaymentDialog({
     enabled: open && customerId > 0
   })
 
-  const outstandingInvoices = debtSummary?.invoices || []
+  const outstandingInvoices = useMemo(() => {
+    return (debtSummary?.invoices || []).filter(invoice =>
+      invoice.status !== 'processing' && !!invoice.exported_at
+    )
+  }, [debtSummary])
 
   const allocationPreview = useMemo(() => {
     if (mode === 'manual') return manualAllocations

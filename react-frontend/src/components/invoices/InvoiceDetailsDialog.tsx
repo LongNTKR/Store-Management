@@ -17,11 +17,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { formatCurrency, formatDate } from "@/lib/utils"
 import type { Invoice } from "@/types"
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { paymentService } from "@/services/payments"
 import { useInvoiceReturns } from "@/hooks/useInvoiceReturns"
 import { CreateReturnDialog } from "./CreateReturnDialog"
-import { Loader2, Package, FileText } from "lucide-react"
+import { Loader2, Package, FileText, AlertTriangle } from "lucide-react"
 import { invoiceReturnService } from "@/services/invoiceReturns"
 import { toast } from "sonner"
 
@@ -42,6 +42,7 @@ export function InvoiceDetailsDialog({
     open,
     onOpenChange,
 }: InvoiceDetailsDialogProps) {
+    const queryClient = useQueryClient()
     const [createReturnDialogOpen, setCreateReturnDialogOpen] = useState(false)
     const [downloadingReturn, setDownloadingReturn] = useState<number | null>(null)
 
@@ -70,6 +71,10 @@ export function InvoiceDetailsDialog({
             link.click()
             URL.revokeObjectURL(url)
             toast.success('Đã tải phiếu hoàn trả PDF')
+
+            // Invalidate queries to refresh return data with updated exported_at
+            queryClient.invalidateQueries({ queryKey: ['invoice-returns'] })
+            queryClient.invalidateQueries({ queryKey: ['customer-returns'] })
         } catch (error: any) {
             const errorMsg = error?.response?.data?.detail || 'Không thể tạo PDF'
             toast.error(errorMsg)
@@ -128,6 +133,14 @@ export function InvoiceDetailsDialog({
                                     </p>
                                     {invoice.payment_method && (
                                         <p><span className="text-muted-foreground">Thanh toán:</span> {paymentMethodMap[invoice.payment_method] || invoice.payment_method}</p>
+                                    )}
+                                    {invoice.exported_at ? (
+                                        <p><span className="text-muted-foreground">Đã xuất:</span> {formatDate(invoice.exported_at, 'dd/MM/yyyy HH:mm')}</p>
+                                    ) : (
+                                        <p className="flex items-center gap-1 text-amber-600">
+                                            <AlertTriangle className="h-3 w-3" />
+                                            <span className="text-xs">Hóa đơn chưa xuất - Chưa tính vào công nợ</span>
+                                        </p>
                                     )}
                                 </div>
                             </div>
@@ -282,104 +295,121 @@ export function InvoiceDetailsDialog({
                     </TabsContent>
 
                     {/* Tab: Returns */}
-                    <TabsContent value="returns" className="space-y-4 py-4 h-[550px] overflow-y-auto">
-                        <div className="flex justify-between items-center mb-4">
-                            <h4 className="font-semibold">Lịch sử hoàn trả</h4>
-                            <Button
-                                size="sm"
-                                onClick={() => setCreateReturnDialogOpen(true)}
-                                disabled={invoice.status === 'cancelled' || invoice.status === 'processing'}
-                            >
-                                <Package className="h-4 w-4 mr-2" />
-                                Tạo hoàn trả mới
-                            </Button>
-                        </div>
-
-                        {isLoadingReturns ? (
-                            <div className="flex items-center justify-center py-8">
-                                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                                <span className="ml-2 text-sm text-muted-foreground">Đang tải...</span>
-                            </div>
-                        ) : invoiceReturns && invoiceReturns.length > 0 ? (
-                            <div className="space-y-4">
-                                {invoiceReturns.map((returnItem) => (
-                                    <div key={returnItem.id} className="border rounded-lg p-4 space-y-3">
-                                        <div className="flex items-start justify-between">
-                                            <div className="space-y-1">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="font-semibold">{returnItem.return_number}</span>
-                                                    {returnItem.is_full_return && (
-                                                        <span className="text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded">
-                                                            Hoàn trả toàn bộ
-                                                        </span>
-                                                    )}
-                                                    <Button
-                                                        size="sm"
-                                                        variant="outline"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation()
-                                                            handleDownloadReturnPdf(returnItem.id)
-                                                        }}
-                                                        disabled={downloadingReturn === returnItem.id}
-                                                    >
-                                                        {downloadingReturn === returnItem.id ? (
-                                                            <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                                                        ) : (
-                                                            <FileText className="h-4 w-4 mr-1" />
-                                                        )}
-                                                        PDF
-                                                    </Button>
-                                                </div>
-                                                <p className="text-sm text-muted-foreground">
-                                                    {formatDate(returnItem.created_at, 'dd/MM/yyyy HH:mm')}
-                                                    {returnItem.created_by && ` • ${returnItem.created_by}`}
-                                                </p>
-                                            </div>
-                                            <div className="text-right">
-                                                <p className="text-sm text-muted-foreground">Hoàn tiền</p>
-                                                <p className="text-lg font-semibold text-red-600">
-                                                    {formatCurrency(returnItem.refund_amount)}
-                                                </p>
-                                            </div>
-                                        </div>
-
-                                        <div className="space-y-1 text-sm">
-                                            <p>
-                                                <span className="font-medium">Lý do:</span> {returnItem.reason}
-                                            </p>
-                                            {returnItem.notes && (
-                                                <p className="text-muted-foreground">
-                                                    <span className="font-medium">Ghi chú:</span> {returnItem.notes}
-                                                </p>
-                                            )}
-                                        </div>
-
-                                        <div className="border-t pt-3 space-y-2">
-                                            <p className="text-sm font-medium">Sản phẩm hoàn trả:</p>
-                                            <div className="space-y-1">
-                                                {returnItem.return_items.map((item) => (
-                                                    <div key={item.id} className="flex justify-between text-sm pl-4">
-                                                        <span>
-                                                            • {item.product_name}: {item.quantity_returned} {item.unit}
-                                                        </span>
-                                                        <span className="text-muted-foreground">
-                                                            {formatCurrency(item.subtotal)}
-                                                        </span>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
+                    <TabsContent value="returns" className="space-y-4 py-4 h-[550px] overflow-y-auto relative">
+                        {!invoice.exported_at && (
+                            <div className="absolute inset-0 z-10 flex items-center justify-center backdrop-blur-sm bg-white/50">
+                                <div className="bg-background border rounded-lg shadow-lg p-6 max-w-sm text-center space-y-3">
+                                    <div className="mx-auto w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
+                                        <AlertTriangle className="h-5 w-5 text-amber-600" />
                                     </div>
-                                ))}
-                            </div>
-                        ) : (
-                            <div className="text-center py-8 rounded-lg border border-dashed">
-                                <Package className="h-12 w-12 mx-auto text-muted-foreground/50 mb-2" />
-                                <p className="text-sm text-muted-foreground">
-                                    Chưa có hoàn trả nào cho hóa đơn này
-                                </p>
+                                    <div className="space-y-1">
+                                        <h4 className="font-semibold">Chưa xuất hóa đơn</h4>
+                                        <p className="text-sm text-muted-foreground">
+                                            Bạn không thể sử dụng tính năng này khi chưa xuất hóa đơn (PDF hoặc Excel)
+                                        </p>
+                                    </div>
+                                </div>
                             </div>
                         )}
+                        <div className={!invoice.exported_at ? "opacity-30 pointer-events-none select-none filter blur-[1px]" : ""}>
+                            <div className="flex justify-between items-center mb-4">
+                                <h4 className="font-semibold">Lịch sử hoàn trả</h4>
+                                <Button
+                                    size="sm"
+                                    onClick={() => setCreateReturnDialogOpen(true)}
+                                    disabled={invoice.status === 'cancelled' || invoice.status === 'processing' || !invoice.exported_at}
+                                >
+                                    <Package className="h-4 w-4 mr-2" />
+                                    Tạo hoàn trả mới
+                                </Button>
+                            </div>
+
+                            {isLoadingReturns ? (
+                                <div className="flex items-center justify-center py-8">
+                                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                                    <span className="ml-2 text-sm text-muted-foreground">Đang tải...</span>
+                                </div>
+                            ) : invoiceReturns && invoiceReturns.length > 0 ? (
+                                <div className="space-y-4">
+                                    {invoiceReturns.map((returnItem) => (
+                                        <div key={returnItem.id} className="border rounded-lg p-4 space-y-3">
+                                            <div className="flex items-start justify-between">
+                                                <div className="space-y-1">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-semibold">{returnItem.return_number}</span>
+                                                        {returnItem.is_full_return && (
+                                                            <span className="text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded">
+                                                                Hoàn trả toàn bộ
+                                                            </span>
+                                                        )}
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation()
+                                                                handleDownloadReturnPdf(returnItem.id)
+                                                            }}
+                                                            disabled={downloadingReturn === returnItem.id}
+                                                        >
+                                                            {downloadingReturn === returnItem.id ? (
+                                                                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                                                            ) : (
+                                                                <FileText className="h-4 w-4 mr-1" />
+                                                            )}
+                                                            PDF
+                                                        </Button>
+                                                    </div>
+                                                    <p className="text-sm text-muted-foreground">
+                                                        {formatDate(returnItem.created_at, 'dd/MM/yyyy HH:mm')}
+                                                        {returnItem.created_by && ` • ${returnItem.created_by}`}
+                                                    </p>
+                                                </div>
+                                                <div className="text-right">
+                                                    <p className="text-sm text-muted-foreground">Hoàn tiền</p>
+                                                    <p className="text-lg font-semibold text-red-600">
+                                                        {formatCurrency(returnItem.refund_amount)}
+                                                    </p>
+                                                </div>
+                                            </div>
+
+                                            <div className="space-y-1 text-sm">
+                                                <p>
+                                                    <span className="font-medium">Lý do:</span> {returnItem.reason}
+                                                </p>
+                                                {returnItem.notes && (
+                                                    <p className="text-muted-foreground">
+                                                        <span className="font-medium">Ghi chú:</span> {returnItem.notes}
+                                                    </p>
+                                                )}
+                                            </div>
+
+                                            <div className="border-t pt-3 space-y-2">
+                                                <p className="text-sm font-medium">Sản phẩm hoàn trả:</p>
+                                                <div className="space-y-1">
+                                                    {returnItem.return_items.map((item) => (
+                                                        <div key={item.id} className="flex justify-between text-sm pl-4">
+                                                            <span>
+                                                                • {item.product_name}: {item.quantity_returned} {item.unit}
+                                                            </span>
+                                                            <span className="text-muted-foreground">
+                                                                {formatCurrency(item.subtotal)}
+                                                            </span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="text-center py-8 rounded-lg border border-dashed">
+                                    <Package className="h-12 w-12 mx-auto text-muted-foreground/50 mb-2" />
+                                    <p className="text-sm text-muted-foreground">
+                                        Chưa có hoàn trả nào cho hóa đơn này
+                                    </p>
+                                </div>
+                            )}
+                        </div>
                     </TabsContent>
                 </Tabs>
 

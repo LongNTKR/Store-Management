@@ -184,6 +184,7 @@ async def get_customer_debt(
                 notes=inv.notes,
                 created_at=inv.created_at,
                 updated_at=inv.updated_at,
+                exported_at=inv.exported_at,  # Include export timestamp for debt collection logic
                 items=[]  # Don't need items for debt summary
             ))
 

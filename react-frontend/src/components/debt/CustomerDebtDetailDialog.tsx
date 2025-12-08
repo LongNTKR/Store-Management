@@ -120,7 +120,7 @@ export function CustomerDebtDetailDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-5xl">
           <DialogHeader>
             <DialogTitle className="text-xl">
               Công nợ khách hàng: {customerName || `ID ${customerId}`}
@@ -138,7 +138,7 @@ export function CustomerDebtDetailDialog({
               <TabsTrigger value="aging">Phân tích tuổi nợ</TabsTrigger>
             </TabsList>
 
-            <TabsContent value="overview" className="space-y-4">
+            <TabsContent value="overview" className="space-y-4 py-4 h-[550px] overflow-y-auto">
               {isLoadingDebt ? (
                 <div className="flex items-center justify-center py-8">
                   <Loader2 className="h-6 w-6 animate-spin" />
@@ -264,12 +264,12 @@ export function CustomerDebtDetailDialog({
             </TabsContent>
 
             {/* Tab 2: Invoices */}
-            <TabsContent value="invoices" className="space-y-4">
+            <TabsContent value="invoices" className="space-y-4 py-4 h-[550px]">
               <InvoiceTabContent customerId={customerId} />
             </TabsContent>
 
             {/* Tab 3: Payment History */}
-            <TabsContent value="payments" className="space-y-4">
+            <TabsContent value="payments" className="space-y-4 py-4 h-[550px] overflow-y-auto">
               <PaymentHistoryTable
                 payments={payments}
                 onReverse={handleReversePayment}
@@ -278,7 +278,7 @@ export function CustomerDebtDetailDialog({
             </TabsContent>
 
             {/* Tab 4: Aging Analysis */}
-            <TabsContent value="aging" className="space-y-4">
+            <TabsContent value="aging" className="space-y-4 py-4 h-[550px] overflow-y-auto">
               <AgingAnalysis customerId={customerId} />
             </TabsContent>
           </Tabs>
@@ -315,8 +315,21 @@ function InvoiceTabContent({ customerId }: { customerId: number }) {
     enabled: !!customerId
   })
 
+  const { data: returns, isLoading: isLoadingReturns } = useQuery({
+    queryKey: ['customer-returns', customerId],
+    queryFn: () => invoiceService.getReturnsByCustomer(customerId),
+    enabled: !!customerId
+  })
+
   // Safe check if Response is paginated or direct array, usually it's PaginatedResponse with items
-  const invoices = invoicesResponse?.items || []
+  const invoicesList = invoicesResponse?.items || []
+  const returnsList = returns || []
+
+  // Combine and sort by date descending
+  const combinedList = [
+    ...invoicesList.map(inv => ({ ...inv, type: 'invoice' as const, date: new Date(inv.created_at) })),
+    ...returnsList.map(ret => ({ ...ret, type: 'return' as const, date: new Date(ret.created_at) }))
+  ].sort((a, b) => b.date.getTime() - a.date.getTime())
 
   const toggleStatus = (status: string) => {
     setSelectedStatuses(prev =>
@@ -334,7 +347,7 @@ function InvoiceTabContent({ customerId }: { customerId: number }) {
   ]
 
   return (
-    <div className="space-y-4">
+    <div className="h-full flex flex-col space-y-4">
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-4 rounded-md border p-3 bg-slate-50/50">
         <div className="flex items-center gap-2">
@@ -396,26 +409,64 @@ function InvoiceTabContent({ customerId }: { customerId: number }) {
         )}
       </div>
 
-      {isLoading ? (
+      {isLoading || isLoadingReturns ? (
         <div className="flex items-center justify-center py-8">
           <Loader2 className="h-6 w-6 animate-spin" />
         </div>
-      ) : invoices.length > 0 ? (
-        <div className="rounded-md border max-h-[500px] overflow-auto">
-          <Table>
-            <TableHeader className="sticky top-0 bg-white shadow-sm z-10">
-              <TableRow>
-                <TableHead>Số hóa đơn</TableHead>
-                <TableHead>Ngày tạo</TableHead>
-                <TableHead className="text-right">Tổng tiền</TableHead>
-                <TableHead className="text-right">Đã thanh toán</TableHead>
-                <TableHead className="text-right">Còn lại</TableHead>
-                <TableHead>Trạng thái</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {invoices.map((invoice) => (
-                <TableRow key={invoice.id}>
+      ) : combinedList.length > 0 ? (
+        <div className="rounded-md border flex-1 overflow-auto">\n          <Table>
+          <TableHeader className="sticky top-0 bg-white shadow-sm z-10">
+            <TableRow>
+              <TableHead>Số phiếu</TableHead>
+              <TableHead>Ngày tạo</TableHead>
+              <TableHead className="text-right">Tổng tiền</TableHead>
+              <TableHead className="text-right">Đã thanh toán/hoàn</TableHead>
+              <TableHead className="text-right">Còn lại</TableHead>
+              <TableHead>Trạng thái</TableHead>
+              <TableHead>Trạng thái xuất</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {combinedList.map((item) => {
+              if (item.type === 'return') {
+                // Render Return Row
+                return (
+                  <TableRow key={`return-${item.id}`} className="bg-red-50/30">
+                    <TableCell className="font-medium">{item.return_number}</TableCell>
+                    <TableCell>{formatDate(item.created_at, 'dd/MM/yyyy')}</TableCell>
+                    <TableCell className="text-right text-red-600 font-medium">
+                      -{formatCurrency(item.refund_amount)}
+                    </TableCell>
+                    <TableCell className="text-right text-red-600">
+                      -{formatCurrency(item.refund_amount)}
+                    </TableCell>
+                    <TableCell className="text-right text-slate-400">
+                      -
+                    </TableCell>
+                    <TableCell>
+                      <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-red-100 text-red-800">
+                        Hoàn trả
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      {('exported_at' in item && item.exported_at) ? (
+                        <span className="text-xs text-emerald-600" title={formatDate(item.exported_at as string, 'dd/MM/yyyy HH:mm')}>
+                          ✓ Đã xuất
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-700 border border-gray-300">
+                          Chưa xuất
+                        </span>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                )
+              }
+
+              // Render Invoice Row (existing logic)
+              const invoice = item
+              return (
+                <TableRow key={`invoice-${invoice.id}`}>
                   <TableCell className="font-medium">{invoice.invoice_number}</TableCell>
                   <TableCell>{formatDate(invoice.created_at, 'dd/MM/yyyy')}</TableCell>
                   <TableCell className="text-right">{formatCurrency(invoice.total)}</TableCell>
@@ -444,10 +495,22 @@ function InvoiceTabContent({ customerId }: { customerId: number }) {
                       </span>
                     )}
                   </TableCell>
+                  <TableCell>
+                    {invoice.exported_at ? (
+                      <span className="text-xs text-emerald-600" title={formatDate(invoice.exported_at, 'dd/MM/yyyy HH:mm')}>
+                        ✓ Đã xuất
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-700 border border-gray-300">
+                        Chưa xuất
+                      </span>
+                    )}
+                  </TableCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              )
+            })}
+          </TableBody>
+        </Table>
         </div>
       ) : (
         <div className="text-center py-12 border-2 border-dashed rounded-lg bg-slate-50">

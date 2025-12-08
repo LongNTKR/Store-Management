@@ -15,33 +15,61 @@ from reportlab.pdfbase.ttfonts import TTFont
 
 from database.models import (
     Invoice, InvoiceItem, InvoiceReturn, InvoiceReturnItem,
-    Payment, PaymentAllocation, Product, get_vn_time
+    Payment, PaymentAllocation, Product, Unit, get_vn_time
 )
 from schemas.invoice_return import (
     InvoiceReturnCreate, InvoiceReturnItemCreate,
     InvoiceReturnResponse, AvailableReturnQuantity
 )
+from pathlib import Path
+
+def _is_valid_ttf(path: Path) -> bool:
+    """Quick check to avoid HTML/error files when download fails."""
+    try:
+        if not path.exists() or path.stat().st_size < 1024:
+            return False
+        with path.open("rb") as f:
+            header = f.read(4)
+            return header in {b"\x00\x01\x00\x00", b"OTTO"}
+    except Exception:
+        return False
+
+FONT_DIR = Path(__file__).resolve().parent / "fonts"
+regular_font_path = FONT_DIR / "DejaVuSans.ttf"
+bold_font_path = FONT_DIR / "DejaVuSans-Bold.ttf"
+
+# Windows system fonts as backup (have Vietnamese glyphs)
+windows_regular = Path("C:/Windows/Fonts/arial.ttf")
+windows_bold = Path("C:/Windows/Fonts/arialbd.ttf")
+
 
 # Font configuration (same as invoice_service.py)
 FONT_NORMAL = 'Helvetica'
 FONT_BOLD = 'Helvetica-Bold'
+font_candidates = [
+    ("DejaVuSans", regular_font_path, bold_font_path),
+    ("Arial", windows_regular, windows_bold),
+]
 
-# Try to register DejaVu Sans fonts for Vietnamese support
-try:
-    pdfmetrics.registerFont(TTFont('DejaVuSans', 'fonts/DejaVuSans.ttf'))
-    pdfmetrics.registerFont(TTFont('DejaVuSans-Bold', 'fonts/DejaVuSans-Bold.ttf'))
-    FONT_NORMAL = 'DejaVuSans'
-    FONT_BOLD = 'DejaVuSans-Bold'
-except:
-    # Try Windows Arial fonts
+for font_name, normal_path, bold_path in font_candidates:
+    if not (_is_valid_ttf(normal_path) and _is_valid_ttf(bold_path)):
+        continue
+    
     try:
-        pdfmetrics.registerFont(TTFont('Arial', 'C:\\Windows\\Fonts\\arial.ttf'))
-        pdfmetrics.registerFont(TTFont('Arial-Bold', 'C:\\Windows\\Fonts\\arialbd.ttf'))
-        FONT_NORMAL = 'Arial'
-        FONT_BOLD = 'Arial-Bold'
-    except:
-        # Fallback to Helvetica
-        pass
+        pdfmetrics.registerFont(TTFont(font_name, str(normal_path)))
+        pdfmetrics.registerFont(TTFont(f"{font_name}-Bold", str(bold_path)))
+        pdfmetrics.registerFontFamily(
+            font_name,
+            normal=font_name,
+            bold=f"{font_name}-Bold",
+            italic=font_name,  # Fallback
+            boldItalic=f"{font_name}-Bold"  # Fallback
+        )
+        FONT_NORMAL = font_name
+        FONT_BOLD = f"{font_name}-Bold"
+        break
+    except Exception as e:
+        print(f"Warning: Could not load {font_name} fonts from {normal_path}: {e}")
 
 
 class InvoiceReturnService:
@@ -160,6 +188,24 @@ class InvoiceReturnService:
             InvoiceReturn.invoice_id == invoice_id
         ).order_by(InvoiceReturn.created_at.desc()).all()
 
+    def get_customer_returns(self, customer_id: int) -> List[InvoiceReturn]:
+        """
+        Get all returns for a customer.
+
+        Args:
+            customer_id: Customer ID
+
+        Returns:
+            List of InvoiceReturn objects
+        """
+        return self.db.query(InvoiceReturn).join(Invoice).options(
+            joinedload(InvoiceReturn.invoice),
+            joinedload(InvoiceReturn.return_items),
+            joinedload(InvoiceReturn.refund_payment)
+        ).filter(
+            Invoice.customer_id == customer_id
+        ).order_by(InvoiceReturn.created_at.desc()).all()
+
     def get_return(self, return_id: int) -> Optional[InvoiceReturn]:
         """
         Get a specific return by ID.
@@ -186,7 +232,11 @@ class InvoiceReturnService:
         Returns:
             List of dicts with available return info for each item
         """
-        invoice = self.db.query(Invoice).filter(Invoice.id == invoice_id).first()
+        # Eager load items, products and units for performance and data access
+        invoice = self.db.query(Invoice).options(
+            joinedload(Invoice.items).joinedload(InvoiceItem.product).joinedload(Product.unit_ref)
+        ).filter(Invoice.id == invoice_id).first()
+        
         if not invoice:
             raise ValueError(f"Không tìm thấy hóa đơn với ID {invoice_id}")
 
@@ -202,6 +252,33 @@ class InvoiceReturnService:
 
             available = item.quantity - already_returned
 
+            # Determine allows_decimal
+            allows_decimal = True # Default to True (allow float) if unknown
+            
+            # Logic: 
+            # 1. Try to get from Product -> Unit relation
+            # 2. If not available, try to look up Unit by name (fallback for when product is deleted or unit changed)
+            
+            if item.product and item.product.unit_ref:
+                allows_decimal = item.product.unit_ref.allows_decimal
+            else:
+                # Fallback: check unit by name
+                # We need to verify if the unit name in InvoiceItem corresponds to a Unit record
+                unit_name = item.unit
+                if unit_name:
+                    unit_obj = self.db.query(Unit).filter(Unit.name == unit_name).first()
+                    if unit_obj:
+                        allows_decimal = unit_obj.allows_decimal
+                    else:
+                        # Hardcoded fallback for common integer units if not found in DB
+                        # This matches the previous frontend logic as a safety net
+                        integer_units = [
+                            'cái', 'chiếc', 'bộ', 'hộp', 'thùng',
+                            'viên', 'chai', 'lọ', 'hũ', 'gói', 'bao', 'con'
+                        ]
+                        if unit_name.lower().strip() in integer_units:
+                            allows_decimal = False
+
             result.append({
                 'invoice_item_id': item.id,
                 'product_id': item.product_id,
@@ -210,6 +287,7 @@ class InvoiceReturnService:
                 'already_returned': already_returned,
                 'available_for_return': available,
                 'unit': item.unit,
+                'allows_decimal': allows_decimal,
                 'product_price': item.product_price
             })
 
@@ -576,9 +654,9 @@ class InvoiceReturnService:
                 str(idx),
                 Paragraph(item.product_name, product_style),
                 f"{item.product_price:,.0f}",
-                str(item.quantity_returned),
+                f"-{item.quantity_returned}",  # Negative quantity
                 item.unit,
-                f"{item.subtotal:,.0f}"
+                f"-{item.subtotal:,.0f}"  # Negative subtotal
             ])
 
         # Table styling
@@ -618,7 +696,7 @@ class InvoiceReturnService:
             alignment=2  # Right align
         )
         elements.append(Paragraph(
-            f"<b>Tổng tiền hoàn trả: {invoice_return.refund_amount:,.0f} VNĐ</b>",
+            f"<b>Tổng tiền hoàn trả: -{invoice_return.refund_amount:,.0f} VNĐ</b>",
             total_style
         ))
         elements.append(Spacer(1, 20))
@@ -637,18 +715,26 @@ class InvoiceReturnService:
 
         # Signature section
         signature_table = Table([
-            ['Người hoàn trả', 'Người nhận']
+            ['Người hoàn trả', 'Người nhận'],
+            ['(Ký, ghi rõ họ tên)', '(Ký, ghi rõ họ tên)']
         ], colWidths=[250, 250])
         signature_table.setStyle(TableStyle([
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, -1), FONT_BOLD),
-            ('FONTSIZE', (0, 0), (-1, -1), 10),
-            ('TOPPADDING', (0, 0), (-1, -1), 40),
+            ('FONTNAME', (0, 0), (-1, 0), FONT_BOLD),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('FONTNAME', (0, 1), (-1, 1), 'Helvetica-Oblique' if FONT_NORMAL == 'Helvetica' else FONT_NORMAL),
+            ('FONTSIZE', (0, 1), (-1, 1), 9),
+            ('TOPPADDING', (0, 0), (-1, 0), 40),
         ]))
         elements.append(Spacer(1, 30))
         elements.append(signature_table)
 
         # Build PDF
         doc.build(elements)
+        
+        # Set exported_at timestamp if this is the first export
+        if not invoice_return.exported_at:
+            invoice_return.exported_at = get_vn_time()
+            self.db.commit()
 
         return pdf_path

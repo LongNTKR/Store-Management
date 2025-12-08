@@ -12,7 +12,7 @@ class ProductBase(BaseModel):
     description: Optional[str] = None
     category: Optional[str] = None
     unit_id: int  # Foreign key to units table
-    stock_quantity: int = 0
+    stock_quantity: float = 0
 
 
 class ProductCreate(ProductBase):
@@ -26,7 +26,7 @@ class ProductUpdate(BaseModel):
     description: Optional[str] = None
     category: Optional[str] = None
     unit_id: Optional[int] = None  # Foreign key to units table
-    stock_quantity: Optional[int] = None
+    stock_quantity: Optional[float] = None
 
 
 class Product(BaseModel):
@@ -38,7 +38,7 @@ class Product(BaseModel):
     description: Optional[str] = None
     category: Optional[str] = None
     unit: Unit  # Nested unit object from relationship
-    stock_quantity: int = 0
+    stock_quantity: float = 0
     images: List[str] = []
     image_paths: Optional[str] = None
     created_at: datetime

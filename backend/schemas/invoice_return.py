@@ -74,6 +74,7 @@ class InvoiceReturnResponse(BaseModel):
     created_at: datetime
     created_by: Optional[str] = None
     notes: Optional[str] = None
+    exported_at: Optional[datetime] = None  # First export timestamp (PDF)
     return_items: List[InvoiceReturnItemResponse] = []
 
     class Config:
@@ -89,6 +90,7 @@ class AvailableReturnQuantity(BaseModel):
     already_returned: float
     available_for_return: float
     unit: str
+    allows_decimal: bool = True
     product_price: float
 
     class Config:

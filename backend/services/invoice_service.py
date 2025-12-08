@@ -3,7 +3,7 @@
 import os
 from typing import List, Optional, Dict, Tuple, Union
 from datetime import datetime, timedelta
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import and_, or_
 import pytz
 from rapidfuzz import fuzz
@@ -321,7 +321,7 @@ class InvoiceService:
         invoice_items = []
 
         for item_data in items:
-            product = self.db.query(Product).filter(
+            product = self.db.query(Product).options(joinedload(Product.unit_ref)).filter(
                 Product.id == item_data['product_id']
             ).first()
 
@@ -331,12 +331,15 @@ class InvoiceService:
             quantity = item_data['quantity']
             item_subtotal = product.price * quantity
 
+            # Determine unit: prioritize unit_ref.display_name, fall back to product.unit
+            unit_name = product.unit_ref.display_name if product.unit_ref else product.unit
+
             invoice_item = InvoiceItem(
                 product_id=product.id,
                 product_name=product.name,
                 product_price=product.price,
                 quantity=quantity,
-                unit=product.unit,
+                unit=unit_name,
                 subtotal=item_subtotal
             )
             invoice_items.append(invoice_item)
@@ -475,12 +478,15 @@ class InvoiceService:
 
         subtotal = 0
         for item_data in items:
-            product = self.db.query(Product).filter(Product.id == item_data['product_id']).first()
+            product = self.db.query(Product).options(joinedload(Product.unit_ref)).filter(Product.id == item_data['product_id']).first()
             if not product:
                 raise ValueError(f"Product {item_data['product_id']} not found")
 
             quantity = item_data['quantity']
             item_subtotal = product.price * quantity
+
+            # Determine unit: prioritize unit_ref.display_name, fall back to product.unit
+            unit_name = product.unit_ref.display_name if product.unit_ref else product.unit
 
             invoice_item = InvoiceItem(
                 invoice_id=invoice_id,
@@ -488,7 +494,7 @@ class InvoiceService:
                 product_name=product.name,
                 product_price=product.price,
                 quantity=quantity,
-                unit=product.unit,
+                unit=unit_name,
                 subtotal=item_subtotal
             )
             self.db.add(invoice_item)
@@ -559,8 +565,7 @@ class InvoiceService:
             limit: Page size
             offset: Offset for pagination
         """
-        from typing import Union
-        from sqlalchemy.orm import joinedload
+
 
         safe_limit, safe_offset = self._normalize_page_params(limit, offset)
         filters = []

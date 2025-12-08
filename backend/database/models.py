@@ -58,7 +58,7 @@ class Product(Base):
     category = Column(String(100), nullable=True, index=True)
     unit = Column(String(50), default='cái')  # đơn vị: cái, hộp, kg, etc. (DEPRECATED - will be removed)
     unit_id = Column(Integer, ForeignKey('units.id'), nullable=True)  # Foreign key to units table
-    stock_quantity = Column(Integer, default=0)
+    stock_quantity = Column(Float, default=0)
 
     # Images stored as comma-separated paths
     image_paths = Column(Text, nullable=True)  # "path1.jpg,path2.jpg,path3.jpg"
@@ -146,14 +146,19 @@ class Customer(Base):
         return f"<Customer(id={self.id}, name='{self.name}', phone='{self.phone}')>"
 
     def get_total_debt(self, db_session) -> float:
-        """Calculate total outstanding debt (computed on-the-fly, not stored)."""
+        """Calculate total outstanding debt (computed on-the-fly, not stored).
+        
+        Only includes exported invoices (exported_at IS NOT NULL) to ensure
+        debt is only counted after invoice has been officially issued.
+        """
         from sqlalchemy import func
         result = db_session.query(
             func.sum(Invoice.remaining_amount)
         ).filter(
             Invoice.customer_id == self.id,
             Invoice.status.in_(['pending', 'paid']),
-            Invoice.remaining_amount > 0
+            Invoice.remaining_amount > 0,
+            Invoice.exported_at.isnot(None)  # Only count exported invoices
         ).scalar()
         return float(result or 0)
 
@@ -412,6 +417,7 @@ class InvoiceReturn(Base):
     created_at = Column(DateTime, default=get_vn_time, index=True)
     created_by = Column(String(100), nullable=True)  # Username/staff who processed return
     notes = Column(Text, nullable=True)
+    exported_at = Column(DateTime, nullable=True, index=True)  # First export timestamp (PDF)
 
     # Relationships
     invoice = relationship('Invoice', back_populates='returns')

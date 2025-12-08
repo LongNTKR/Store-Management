@@ -165,3 +165,26 @@ export interface ImportResult {
     skipped: number
     errors: string[]
 }
+
+export interface InvoiceReturnItem {
+    id: number
+    product_name: string
+    product_price: number
+    quantity_returned: number
+    unit: string
+    subtotal: number
+}
+
+export interface InvoiceReturn {
+    id: number
+    return_number: string
+    invoice_id: number
+    invoice_number?: string
+    reason: string
+    refund_amount: number
+    is_full_return: boolean
+    created_at: string
+    created_by?: string
+    notes?: string
+    return_items: InvoiceReturnItem[]
+}
