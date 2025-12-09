@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Download, FileText, Loader2, AlertCircle, Filter, X } from 'lucide-react'
+import { useState, useMemo } from 'react'
+import { Download, FileText, Loader2, AlertCircle, Filter, X, CornerDownRight } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -27,8 +27,10 @@ import { debtReportService } from '@/services/debtReports'
 import { PaymentHistoryTable } from '@/components/payments/PaymentHistoryTable'
 import { ReversePaymentDialog } from '@/components/payments/ReversePaymentDialog'
 import { AgingAnalysis } from '@/components/debt/AgingAnalysis'
+import { InvoiceDetailsDialog } from '@/components/invoices/InvoiceDetailsDialog'
 import { toast } from 'sonner'
 import type { Payment } from '@/types/payment'
+import type { Invoice } from '@/types'
 
 interface CustomerDebtDetailDialogProps {
   customerId: number | null
@@ -47,6 +49,7 @@ export function CustomerDebtDetailDialog({
   const [reversePayment, setReversePayment] = useState<Payment | null>(null)
   const [reverseDialogOpen, setReverseDialogOpen] = useState(false)
   const [exporting, setExporting] = useState<'pdf' | 'excel' | null>(null)
+
 
   // Fetch debt summary
   const { data: debtSummary, isLoading: isLoadingDebt } = useQuery({
@@ -145,40 +148,80 @@ export function CustomerDebtDetailDialog({
                 </div>
               ) : debtSummary ? (
                 <>
-                  {/* Stats cards */}
-                  <div className="grid grid-cols-4 gap-4">
-                    <div className="rounded-lg border p-4 space-y-1">
-                      <p className="text-sm text-muted-foreground">Tổng tiền hàng</p>
-                      <p className="text-2xl font-bold text-blue-600">
-                        {formatCurrency(debtSummary.total_revenue)}
-                      </p>
-                    </div>
-                    <div className="rounded-lg border p-4 space-y-1">
-                      <p className="text-sm text-muted-foreground">Tổng nợ</p>
-                      <p className="text-2xl font-bold text-amber-600">
-                        {formatCurrency(debtSummary.total_debt)}
-                      </p>
-                    </div>
-                    <div className="rounded-lg border p-4 space-y-1">
-                      <p className="text-sm text-muted-foreground">Hóa đơn chưa thanh toán đủ</p>
-                      <p className="text-2xl font-bold">
-                        {debtSummary.total_invoices}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {debtSummary.unpaid_invoices} chưa TT • {debtSummary.partially_paid_invoices} TT một phần
-                      </p>
-                    </div>
-                    <div className="rounded-lg border p-4 space-y-1">
-                      <p className="text-sm text-muted-foreground">Quá hạn (&gt;30 ngày)</p>
-                      <p className="text-2xl font-bold text-red-600">
-                        {formatCurrency(debtSummary.overdue_debt)}
-                      </p>
-                      {debtSummary.overdue_invoices > 0 && (
-                        <div className="flex items-center gap-1 text-xs text-red-600">
-                          <AlertCircle className="h-3 w-3" />
-                          <span>{debtSummary.overdue_invoices} hóa đơn quá hạn</span>
+                  {/* Enhanced Debt Summary Container */}
+                  <div className="space-y-4 p-4 bg-muted/50 rounded-lg">
+                    {/* Row 1: Secondary Metrics (Text-based summary) */}
+                    <div className="grid grid-cols-3 gap-6 pb-4 border-b">
+                      {/* Total Revenue (Original) */}
+                      <div className="space-y-1">
+                        <p className="text-sm text-muted-foreground">Tổng tiền hàng (gốc)</p>
+                        <p className="text-xl font-semibold text-blue-600">
+                          {formatCurrency(debtSummary.total_revenue)}
+                        </p>
+                      </div>
+
+                      {/* Unpaid Invoices */}
+                      <div className="space-y-1">
+                        <p className="text-sm text-muted-foreground">Hóa đơn chưa thanh toán đủ</p>
+                        <p className="text-xl font-semibold">
+                          {debtSummary.total_invoices}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {debtSummary.unpaid_invoices} chưa TT • {debtSummary.partially_paid_invoices} TT một phần
+                        </p>
+                      </div>
+
+                      {/* Overdue */}
+                      <div className="space-y-1">
+                        <p className="text-sm text-muted-foreground">Quá hạn (&gt;30 ngày)</p>
+                        <div className="flex items-end gap-2">
+                          <p className="text-xl font-semibold text-red-600">
+                            {formatCurrency(debtSummary.overdue_debt)}
+                          </p>
+                          {debtSummary.overdue_invoices > 0 && (
+                            <div className="flex items-center gap-1 text-xs text-red-600 mb-1">
+                              <AlertCircle className="h-3 w-3" />
+                              <span>{debtSummary.overdue_invoices} hóa đơn</span>
+                            </div>
+                          )}
                         </div>
-                      )}
+                      </div>
+                    </div>
+
+                    {/* Row 2: Primary Metrics (Highlighted Cards) */}
+                    <div className="grid grid-cols-3 gap-6">
+                      {/* Net Revenue */}
+                      <div className="rounded-lg border-2 border-purple-300 bg-background p-4 shadow-sm space-y-2">
+                        <p className="text-sm font-medium text-muted-foreground">💎 Doanh thu thực tế</p>
+                        <p className="text-2xl font-bold text-purple-600">
+                          {formatCurrency(debtSummary.total_net_revenue)}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Doanh thu sau khi trừ hoàn trả
+                        </p>
+                      </div>
+
+                      {/* Total Debt */}
+                      <div className={`rounded-lg border-2 ${debtSummary.total_debt > 0 ? 'border-amber-300' : 'border-emerald-300'} bg-background p-4 shadow-sm space-y-2`}>
+                        <p className="text-sm font-medium text-muted-foreground">📊 Tổng nợ hiện tại</p>
+                        <p className={`text-2xl font-bold ${debtSummary.total_debt > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                          {formatCurrency(debtSummary.total_debt)}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {debtSummary.total_debt > 0 ? 'Còn phải thu' : '✓ Không có nợ'}
+                        </p>
+                      </div>
+
+                      {/* Total Refunded */}
+                      <div className="rounded-lg border-2 border-red-300 bg-background p-4 shadow-sm space-y-2">
+                        <p className="text-sm font-medium text-muted-foreground">💸 Tiền đã hoàn</p>
+                        <p className="text-2xl font-bold text-red-600">
+                          {formatCurrency(debtSummary.total_refunded)}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Hoàn trả + Trả hàng
+                        </p>
+                      </div>
                     </div>
                   </div>
 
@@ -302,6 +345,13 @@ function InvoiceTabContent({ customerId }: { customerId: number }) {
   const [startDate, setStartDate] = useState<string>('')
   const [endDate, setEndDate] = useState<string>('')
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>([])
+  const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null)
+  const [invoiceDetailsOpen, setInvoiceDetailsOpen] = useState(false)
+
+  const handleInvoiceClick = (invoice: Invoice) => {
+    setSelectedInvoice(invoice)
+    setInvoiceDetailsOpen(true)
+  }
 
   const { data: invoicesResponse, isLoading } = useQuery({
     queryKey: ['customer-invoices', customerId, startDate, endDate, selectedStatuses],
@@ -321,15 +371,35 @@ function InvoiceTabContent({ customerId }: { customerId: number }) {
     enabled: !!customerId
   })
 
-  // Safe check if Response is paginated or direct array, usually it's PaginatedResponse with items
   const invoicesList = invoicesResponse?.items || []
   const returnsList = returns || []
 
-  // Combine and sort by date descending
-  const combinedList = [
-    ...invoicesList.map(inv => ({ ...inv, type: 'invoice' as const, date: new Date(inv.created_at) })),
-    ...returnsList.map(ret => ({ ...ret, type: 'return' as const, date: new Date(ret.created_at) }))
-  ].sort((a, b) => b.date.getTime() - a.date.getTime())
+  // Group returns by invoice_id
+  const { returnsByInvoiceId, orphanReturns } = useMemo(() => {
+    const groups: Record<number, typeof returnsList> = {}
+    const invoiceIds = new Set(invoicesList.map(i => i.id))
+    const orphans: typeof returnsList = []
+
+    returnsList.forEach(ret => {
+      // If the parent invoice is in the current visible list, group it
+      if (invoiceIds.has(ret.invoice_id)) {
+        if (!groups[ret.invoice_id]) groups[ret.invoice_id] = []
+        groups[ret.invoice_id].push(ret)
+      } else {
+        // Otherwise treat as independent row (orphan)
+        orphans.push(ret)
+      }
+    })
+    return { returnsByInvoiceId: groups, orphanReturns: orphans }
+  }, [invoicesList, returnsList])
+
+  // Combine invoices and orphan returns for the main list
+  const displayList = useMemo(() => {
+    return [
+      ...invoicesList.map(inv => ({ ...inv, type: 'invoice' as const, date: new Date(inv.created_at) })),
+      ...orphanReturns.map(ret => ({ ...ret, type: 'return' as const, date: new Date(ret.created_at) }))
+    ].sort((a, b) => b.date.getTime() - a.date.getTime())
+  }, [invoicesList, orphanReturns])
 
   const toggleStatus = (status: string) => {
     setSelectedStatuses(prev =>
@@ -345,6 +415,53 @@ function InvoiceTabContent({ customerId }: { customerId: number }) {
     { value: 'paid', label: 'Đã thanh toán', color: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
     { value: 'cancelled', label: 'Đã hủy', color: 'bg-red-100 text-red-800 border-red-200' },
   ]
+
+  // Render return row helper
+  const renderReturnRow = (item: any, isNested: boolean = false) => (
+    <TableRow key={`return-${item.id}`} className={isNested ? "bg-red-50/20" : "bg-red-50/30"}>
+      <TableCell className="font-medium">
+        <div className={`flex items-center gap-2 ${isNested ? "pl-8" : ""}`}>
+          {isNested && <CornerDownRight className="h-4 w-4 text-slate-400" />}
+          {item.return_number}
+        </div>
+      </TableCell>
+      <TableCell>{formatDate(item.created_at, 'dd/MM/yyyy')}</TableCell>
+      <TableCell className="text-right text-red-600 font-medium">
+        -{formatCurrency(item.refund_amount)}
+      </TableCell>
+      <TableCell className="text-right text-red-600">
+        {item.status === 'refunded' ? `-${formatCurrency(item.refund_amount)}` : '-'}
+      </TableCell>
+      <TableCell className="text-right text-slate-400">
+        -
+      </TableCell>
+      <TableCell className="text-right text-slate-400">
+        -
+      </TableCell>
+      <TableCell>
+        {item.status === 'refunded' ? (
+          <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-emerald-100 text-emerald-800">
+            Đã hoàn tiền
+          </span>
+        ) : (
+          <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-800">
+            Chưa hoàn tiền
+          </span>
+        )}
+      </TableCell>
+      <TableCell>
+        {('exported_at' in item && item.exported_at) ? (
+          <span className="text-xs text-emerald-600" title={formatDate(item.exported_at as string, 'dd/MM/yyyy HH:mm')}>
+            ✓ Đã xuất
+          </span>
+        ) : (
+          <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-700 border border-gray-300">
+            Chưa xuất
+          </span>
+        )}
+      </TableCell>
+    </TableRow>
+  )
 
   return (
     <div className="h-full flex flex-col space-y-4">
@@ -413,7 +530,7 @@ function InvoiceTabContent({ customerId }: { customerId: number }) {
         <div className="flex items-center justify-center py-8">
           <Loader2 className="h-6 w-6 animate-spin" />
         </div>
-      ) : combinedList.length > 0 ? (
+      ) : displayList.length > 0 ? (
         <div className="rounded-md border flex-1 overflow-auto">
           <Table>
             <TableHeader className="sticky top-0 bg-white shadow-sm z-10">
@@ -421,43 +538,69 @@ function InvoiceTabContent({ customerId }: { customerId: number }) {
                 <TableHead>Số phiếu</TableHead>
                 <TableHead>Ngày tạo</TableHead>
                 <TableHead className="text-right">Tổng tiền</TableHead>
-                <TableHead className="text-right">Đã thanh toán/hoàn</TableHead>
+                <TableHead className="text-right">Đã TT/hoàn</TableHead>
                 <TableHead className="text-right">Còn lại</TableHead>
+                <TableHead className="text-right">Doanh thu</TableHead>
                 <TableHead>Trạng thái</TableHead>
                 <TableHead>Trạng thái xuất</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {combinedList.map((item) => {
+              {displayList.map((item) => {
                 if (item.type === 'return') {
-                  // Render Return Row
-                  return (
-                    <TableRow key={`return-${item.id}`} className="bg-red-50/30">
-                      <TableCell className="font-medium">{item.return_number}</TableCell>
-                      <TableCell>{formatDate(item.created_at, 'dd/MM/yyyy')}</TableCell>
-                      <TableCell className="text-right text-red-600 font-medium">
-                        -{formatCurrency(item.refund_amount)}
+                  // Render Orphan Return Row
+                  return renderReturnRow(item, false)
+                }
+
+                // Render Invoice Row
+                const invoice = item as Invoice
+                const childrenReturns = returnsByInvoiceId[invoice.id]
+
+                return (
+                  <>
+                    <TableRow
+                      key={`invoice-${invoice.id}`}
+                      className="cursor-pointer hover:bg-muted/50 transition-colors"
+                      onClick={() => handleInvoiceClick(invoice)}
+                    >
+                      <TableCell className="font-medium">
+                        <div className="flex items-center gap-2">
+                          {invoice.invoice_number}
+                        </div>
                       </TableCell>
-                      <TableCell className="text-right text-red-600">
-                        {item.status === 'refunded' ? `-${formatCurrency(item.refund_amount)}` : '-'}
+                      <TableCell>{formatDate(invoice.created_at, 'dd/MM/yyyy')}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(invoice.total)}</TableCell>
+                      <TableCell className="text-right text-emerald-600">
+                        {formatCurrency(invoice.paid_amount || 0)}
                       </TableCell>
-                      <TableCell className="text-right text-slate-400">
-                        -
+                      <TableCell className="text-right font-semibold text-amber-600">
+                        {formatCurrency(invoice.remaining_amount || 0)}
+                      </TableCell>
+                      <TableCell className="text-right font-bold text-purple-600">
+                        {formatCurrency(invoice.net_amount !== undefined ? invoice.net_amount : (invoice.total - (invoice.total_returned_amount || 0)))}
                       </TableCell>
                       <TableCell>
-                        {item.status === 'refunded' ? (
+                        {invoice.status === 'paid' ? (
                           <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-emerald-100 text-emerald-800">
-                            Đã hoàn tiền
+                            Đã thanh toán
+                          </span>
+                        ) : invoice.status === 'processing' ? (
+                          <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-800">
+                            Đang xử lý
+                          </span>
+                        ) : invoice.status === 'cancelled' ? (
+                          <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-red-100 text-red-800">
+                            Đã hủy
                           </span>
                         ) : (
-                          <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-800">
-                            Chưa hoàn tiền
+                          <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-800">
+                            Chờ thanh toán
                           </span>
                         )}
                       </TableCell>
                       <TableCell>
-                        {('exported_at' in item && item.exported_at) ? (
-                          <span className="text-xs text-emerald-600" title={formatDate(item.exported_at as string, 'dd/MM/yyyy HH:mm')}>
+                        {invoice.exported_at ? (
+                          <span className="text-xs text-emerald-600" title={formatDate(invoice.exported_at, 'dd/MM/yyyy HH:mm')}>
                             ✓ Đã xuất
                           </span>
                         ) : (
@@ -467,53 +610,9 @@ function InvoiceTabContent({ customerId }: { customerId: number }) {
                         )}
                       </TableCell>
                     </TableRow>
-                  )
-                }
-
-                // Render Invoice Row (existing logic)
-                const invoice = item
-                return (
-                  <TableRow key={`invoice-${invoice.id}`}>
-                    <TableCell className="font-medium">{invoice.invoice_number}</TableCell>
-                    <TableCell>{formatDate(invoice.created_at, 'dd/MM/yyyy')}</TableCell>
-                    <TableCell className="text-right">{formatCurrency(invoice.total)}</TableCell>
-                    <TableCell className="text-right text-emerald-600">
-                      {formatCurrency(invoice.paid_amount || 0)}
-                    </TableCell>
-                    <TableCell className="text-right font-semibold text-amber-600">
-                      {formatCurrency(invoice.remaining_amount || 0)}
-                    </TableCell>
-                    <TableCell>
-                      {invoice.status === 'paid' ? (
-                        <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-emerald-100 text-emerald-800">
-                          Đã thanh toán
-                        </span>
-                      ) : invoice.status === 'processing' ? (
-                        <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-800">
-                          Đang xử lý
-                        </span>
-                      ) : invoice.status === 'cancelled' ? (
-                        <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-red-100 text-red-800">
-                          Đã hủy
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-800">
-                          Chờ thanh toán
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {invoice.exported_at ? (
-                        <span className="text-xs text-emerald-600" title={formatDate(invoice.exported_at, 'dd/MM/yyyy HH:mm')}>
-                          ✓ Đã xuất
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-700 border border-gray-300">
-                          Chưa xuất
-                        </span>
-                      )}
-                    </TableCell>
-                  </TableRow>
+                    {/* Render Children Returns */}
+                    {childrenReturns && childrenReturns.map(ret => renderReturnRow(ret, true))}
+                  </>
                 )
               })}
             </TableBody>
@@ -528,6 +627,13 @@ function InvoiceTabContent({ customerId }: { customerId: number }) {
           </p>
         </div>
       )}
+
+      {/* Invoice Details Dialog */}
+      <InvoiceDetailsDialog
+        invoice={selectedInvoice}
+        open={invoiceDetailsOpen}
+        onOpenChange={setInvoiceDetailsOpen}
+      />
     </div>
   )
 }

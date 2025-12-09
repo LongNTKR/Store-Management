@@ -42,12 +42,14 @@ export interface PaymentCreate {
 }
 
 export interface DebtSummary {
-  total_debt: number
-  total_revenue: number
-  total_invoices: number
-  unpaid_invoices: number
-  partially_paid_invoices: number
-  overdue_debt: number
-  overdue_invoices: number
+  total_debt: number  // Outstanding amount customer owes
+  total_revenue: number  // Gross revenue (original invoice totals before returns)
+  total_refunded: number  // Total VALUE of returned goods (not cash settlements)
+  total_net_revenue: number  // Net revenue = total_revenue - total_refunded (actual earned revenue)
+  total_invoices: number  // Number of invoices with outstanding balance
+  unpaid_invoices: number  // Invoices with no payment yet
+  partially_paid_invoices: number  // Invoices with partial payment
+  overdue_debt: number  // Amount overdue (>30 days)
+  overdue_invoices: number  // Count of overdue invoices
   invoices: Invoice[]
 }

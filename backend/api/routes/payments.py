@@ -191,6 +191,8 @@ async def get_customer_debt(
         return DebtSummaryResponse(
             total_debt=summary['total_debt'],
             total_revenue=summary.get('total_revenue', 0),
+            total_refunded=summary.get('total_refunded', 0),
+            total_net_revenue=summary.get('total_net_revenue', 0),
             total_invoices=summary['total_invoices'],
             unpaid_invoices=summary['unpaid_invoices'],
             partially_paid_invoices=summary['partially_paid_invoices'],

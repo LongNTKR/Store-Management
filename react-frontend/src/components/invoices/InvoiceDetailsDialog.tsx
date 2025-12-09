@@ -138,7 +138,8 @@ export function InvoiceDetailsDialog({
                 queryClient.invalidateQueries({ queryKey: ['invoice-returns'] }),
                 queryClient.invalidateQueries({ queryKey: ['customer-returns'] }),
                 queryClient.invalidateQueries({ queryKey: ['invoices'] }),
-                queryClient.invalidateQueries({ queryKey: ['customer-invoices'] })
+                queryClient.invalidateQueries({ queryKey: ['customer-invoices'] }),
+                queryClient.invalidateQueries({ queryKey: ['customer-debt-detail'] })
             ])
 
         } catch (error: any) {

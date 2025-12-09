@@ -477,7 +477,7 @@ class CustomerService:
             customer_id: Customer ID
 
         Returns:
-            Dictionary with customer statistics
+            Dictionary with customer statistics including net spending after refunds
         """
         invoices = self.get_customer_invoices(customer_id)
 
@@ -486,15 +486,31 @@ class CustomerService:
         # Note: total_invoices includes all (raw count), but financial metrics should be strict?
         # User requirement: "chỉ những hóa đơn đã được xuất hóa đơn mới được tính vào công nợ"
         # Since 'pending_invoices' often implies 'outstanding orders', we should align it with debt.
-        
+
         paid_invoices = len([inv for inv in invoices if inv.status == 'paid' and inv.exported_at is not None])
         pending_invoices = len([inv for inv in invoices if inv.status == 'pending' and inv.exported_at is not None])
+
+        # Gross spending (original invoice totals)
         total_spent = sum(inv.total for inv in invoices if inv.status == 'paid' and inv.exported_at is not None)
+
+        # Calculate total refunded (VALUE of returned goods, not just cash settlements)
+        # Use total_returned_amount property which represents actual value of goods returned
+        # This ensures net spending accurately reflects goods actually kept by customer
+        exported_paid_invoices = [inv for inv in invoices if inv.status == 'paid' and inv.exported_at is not None]
+        total_refunded = sum(
+            inv.total_returned_amount  # VALUE of returned goods (from all InvoiceReturn.refund_amount)
+            for inv in exported_paid_invoices
+        )
+
+        # Net spending (spending after deducting value of returned goods)
+        total_net_spent = total_spent - total_refunded
 
         return {
             'total_invoices': total_invoices,
             'paid_invoices': paid_invoices,
             'pending_invoices': pending_invoices,
-            'total_spent': total_spent,
-            'average_order_value': total_spent / paid_invoices if paid_invoices > 0 else 0
+            'total_spent': total_spent,  # Gross spending (keep for backward compatibility)
+            'total_refunded': total_refunded,  # Total refunds
+            'total_net_spent': total_net_spent,  # Net spending after refunds
+            'average_order_value': total_net_spent / paid_invoices if paid_invoices > 0 else 0  # Based on net spending
         }

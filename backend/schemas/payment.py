@@ -110,13 +110,15 @@ class PaymentResponse(BaseModel):
 
 class DebtSummaryResponse(BaseModel):
     """Debt summary response schema."""
-    total_debt: float
-    total_revenue: float
-    total_invoices: int
-    unpaid_invoices: int
-    partially_paid_invoices: int
-    overdue_debt: float
-    overdue_invoices: int
+    total_debt: float  # Outstanding amount customer owes
+    total_revenue: float  # Gross revenue (original invoice totals before returns)
+    total_refunded: float  # Total VALUE of returned goods (not cash settlements)
+    total_net_revenue: float  # Net revenue = total_revenue - total_refunded (actual earned revenue)
+    total_invoices: int  # Number of invoices with outstanding balance
+    unpaid_invoices: int  # Invoices with no payment yet
+    partially_paid_invoices: int  # Invoices with partial payment
+    overdue_debt: float  # Amount overdue (>30 days)
+    overdue_invoices: int  # Count of overdue invoices
     invoices: List  # List of InvoiceResponse (imported from invoice schema)
 
     class Config:

@@ -274,6 +274,27 @@ class PaymentService:
         )
         total_revenue = revenue_query.scalar() or 0.0
 
+        # Calculate total refunded amount (VALUE of returned goods, not just cash settlements)
+        # We need to use total_returned_amount property which sums all InvoiceReturn.refund_amount
+        # This represents the actual value of goods returned, not just settlement cash
+        #
+        # Example: Invoice 32M, paid 9M, return all goods (32M value) → settlement 9M cash
+        #   - inv.refunded_amount = 9M (cash OUT)
+        #   - inv.total_returned_amount = 32M (goods VALUE) ✓ Use this for revenue calculation
+        all_exported_invoices = self.db.query(Invoice).filter(
+            Invoice.customer_id == customer_id,
+            Invoice.status.in_(['pending', 'paid']),
+            Invoice.exported_at.isnot(None)
+        ).all()
+
+        total_refunded = sum(
+            inv.total_returned_amount  # VALUE of returned goods (from all InvoiceReturn.refund_amount)
+            for inv in all_exported_invoices
+        )
+
+        # Calculate net revenue (revenue after deducting value of returned goods)
+        total_net_revenue = total_revenue - total_refunded
+
         # Calculate totals
         total_debt = sum(inv.remaining_amount for inv in invoices)
         unpaid_count = sum(1 for inv in invoices if inv.paid_amount == 0)
@@ -304,7 +325,9 @@ class PaymentService:
 
         return {
             'total_debt': total_debt,
-            'total_revenue': total_revenue,
+            'total_revenue': total_revenue,  # Gross revenue (original invoice totals)
+            'total_refunded': total_refunded,  # Total refunds (payment reversals + returns)
+            'total_net_revenue': total_net_revenue,  # Net revenue (revenue - refunds)
             'total_invoices': len(invoices),
 
             'unpaid_invoices': unpaid_count,
