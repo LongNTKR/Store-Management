@@ -32,8 +32,6 @@ class InvoiceReturnCreate(BaseModel):
         ge=0,
         description="Refund amount (null = auto-calculate, 0 = no refund)"
     )
-    create_refund_payment: bool = Field(True, description="Whether to create a refund payment record")
-    payment_method: Optional[str] = Field("cash", description="Payment method for refund: cash, transfer, card")
     notes: Optional[str] = Field(None, description="Additional notes")
     created_by: Optional[str] = Field(None, description="Username/staff who processed the return")
 
@@ -71,6 +69,7 @@ class InvoiceReturnResponse(BaseModel):
     reason: str
     refund_amount: float
     is_full_return: bool
+    status: str  # pending_refund or refunded
     created_at: datetime
     created_by: Optional[str] = None
     notes: Optional[str] = None
@@ -95,3 +94,17 @@ class AvailableReturnQuantity(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class InvoiceReturnStatusUpdate(BaseModel):
+    """Schema for updating return status."""
+    status: str = Field(..., description="New status: pending_refund or refunded")
+    payment_method: Optional[str] = Field(None, description="Required when changing to refunded (cash, transfer, card)")
+    notes: Optional[str] = Field(None, description="Notes for status change")
+
+    @field_validator('status')
+    @classmethod
+    def validate_status(cls, v):
+        if v not in ['pending_refund', 'refunded']:
+            raise ValueError("Trạng thái phải là 'pending_refund' hoặc 'refunded'")
+        return v

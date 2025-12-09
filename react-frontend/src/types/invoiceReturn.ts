@@ -23,6 +23,7 @@ export interface InvoiceReturn {
   reason: string;
   refund_amount: number;
   is_full_return: boolean;
+  status: 'pending_refund' | 'refunded';
   created_at: string;
   created_by: string | null;
   notes: string | null;
@@ -40,10 +41,14 @@ export interface InvoiceReturnCreate {
   return_items: InvoiceReturnItemCreate[];
   reason: string;
   refund_amount?: number | null;
-  create_refund_payment: boolean;
-  payment_method?: string;
   notes?: string;
   created_by?: string;
+}
+
+export interface InvoiceReturnStatusUpdate {
+  status: 'pending_refund' | 'refunded';
+  payment_method?: string;
+  notes?: string;
 }
 
 export interface AvailableReturnQuantity {

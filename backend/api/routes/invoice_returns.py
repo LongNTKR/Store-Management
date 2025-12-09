@@ -9,6 +9,7 @@ from api.dependencies import get_db
 from schemas.invoice_return import (
     InvoiceReturnCreate,
     InvoiceReturnResponse,
+    InvoiceReturnStatusUpdate,
     AvailableReturnQuantity
 )
 from services.invoice_return_service import InvoiceReturnService
@@ -156,6 +157,51 @@ async def get_return(
 
     if not invoice_return:
         raise HTTPException(status_code=404, detail=f"Không tìm thấy phiếu hoàn trả với ID {return_id}")
+
+    # Populate invoice_number for response
+    response_data = InvoiceReturnResponse.model_validate(invoice_return)
+    if invoice_return.invoice:
+        response_data.invoice_number = invoice_return.invoice.invoice_number
+
+    return response_data
+
+
+@router.patch("/returns/{return_id}/status", response_model=InvoiceReturnResponse)
+async def update_return_status(
+    return_id: int,
+    status_data: InvoiceReturnStatusUpdate,
+    db: Session = Depends(get_db)
+):
+    """
+    Update the status of an invoice return.
+
+    When changing to 'refunded':
+    - Creates refund payment and updates invoice amounts
+
+    When changing to 'pending_refund':
+    - Reverses the refund
+
+    Args:
+        return_id: Return ID
+        status_data: Status update data
+
+    Returns:
+        Updated invoice return
+
+    Raises:
+        HTTPException: 400 if validation fails, 404 if return not found
+    """
+    service = InvoiceReturnService(db)
+
+    try:
+        invoice_return = service.update_return_status(
+            return_id=return_id,
+            new_status=status_data.status,
+            payment_method=status_data.payment_method,
+            notes=status_data.notes
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
     # Populate invoice_number for response
     response_data = InvoiceReturnResponse.model_validate(invoice_return)

@@ -186,8 +186,9 @@ class Invoice(Base):
     total = Column(Float, nullable=False)
 
     # Payment tracking
-    paid_amount = Column(Float, default=0, nullable=False)  # Total amount paid
-    remaining_amount = Column(Float, nullable=False)  # total - paid_amount
+    paid_amount = Column(Float, default=0, nullable=False)  # Total amount paid (cash IN)
+    refunded_amount = Column(Float, default=0, nullable=False)  # NEW: Total refunded (cash OUT)
+    remaining_amount = Column(Float, nullable=False)  # total - paid_amount + refunded_amount
 
     # Status
     status = Column(String(50), default='pending', index=True)  # pending, paid, cancelled
@@ -252,6 +253,21 @@ class Invoice(Base):
     def net_amount(self) -> float:
         """Net amount = total - total_returned_amount."""
         return self.total - self.total_returned_amount
+
+    @property
+    def net_payment_amount(self) -> float:
+        """Net payment = paid_amount - refunded_amount (actual cash flow)."""
+        return self.paid_amount - self.refunded_amount
+
+    @property
+    def shop_owes_customer(self) -> bool:
+        """True if shop owes money back to customer."""
+        return self.net_payment_amount < 0
+
+    @property
+    def customer_owes_shop(self) -> bool:
+        """True if customer still owes money."""
+        return self.remaining_amount > 0
 
 
 class InvoiceItem(Base):
@@ -413,6 +429,9 @@ class InvoiceReturn(Base):
     refund_amount = Column(Float, default=0, nullable=False)  # Amount refunded (can be 0)
     is_full_return = Column(Boolean, default=False)  # Full or partial return
 
+    # Status
+    status = Column(String(20), default='pending_refund', nullable=False, index=True)  # pending_refund, refunded
+
     # Metadata
     created_at = Column(DateTime, default=get_vn_time, index=True)
     created_by = Column(String(100), nullable=True)  # Username/staff who processed return
@@ -427,7 +446,13 @@ class InvoiceReturn(Base):
     # Indexes for performance
     __table_args__ = (
         Index('idx_return_invoice_date', 'invoice_id', 'created_at'),
+        Index('idx_return_status', 'status'),
     )
+
+    @property
+    def is_refunded(self) -> bool:
+        """Check if return has been refunded."""
+        return self.status == 'refunded'
 
     def __repr__(self):
         return f"<InvoiceReturn(id={self.id}, number='{self.return_number}', refund={self.refund_amount})>"

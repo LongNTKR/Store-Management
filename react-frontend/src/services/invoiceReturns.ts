@@ -2,6 +2,7 @@ import api from './api';
 import type {
   InvoiceReturn,
   InvoiceReturnCreate,
+  InvoiceReturnStatusUpdate,
   AvailableReturnQuantity
 } from '../types/invoiceReturn';
 
@@ -45,6 +46,17 @@ export const invoiceReturnService = {
     const response = await api.get(`/api/returns/${returnId}/pdf`, {
       responseType: 'blob'
     });
+    return response.data;
+  },
+
+  /**
+   * Update return status
+   */
+  updateStatus: async (
+    returnId: number,
+    data: InvoiceReturnStatusUpdate
+  ): Promise<InvoiceReturn> => {
+    const response = await api.patch(`/api/returns/${returnId}/status`, data);
     return response.data;
   }
 };

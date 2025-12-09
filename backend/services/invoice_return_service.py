@@ -129,9 +129,10 @@ class InvoiceReturnService:
             reason=data.reason.strip(),
             refund_amount=refund_amount,
             is_full_return=is_full_return,
+            status='pending_refund',  # Always start as pending
             created_by=data.created_by,
             notes=data.notes,
-            refund_payment_id=None  # Will be set later if refund payment created
+            refund_payment_id=None
         )
         self.db.add(invoice_return)
         self.db.flush()  # Get invoice_return.id
@@ -156,16 +157,7 @@ class InvoiceReturnService:
         # Step 8: Update inventory
         self._restore_inventory(validated_items)
 
-        # Step 9: Create refund payment if requested
-        if data.create_refund_payment and refund_amount > 0:
-            refund_payment = self._create_refund_payment(
-                invoice=invoice,
-                refund_amount=refund_amount,
-                payment_method=data.payment_method or 'cash',
-                reason=data.reason,
-                return_number=return_number
-            )
-            invoice_return.refund_payment_id = refund_payment.id
+        # Payment will be created when status is changed to 'refunded' via update_return_status()
 
         self.db.commit()
         self.db.refresh(invoice_return)
@@ -221,6 +213,117 @@ class InvoiceReturnService:
             joinedload(InvoiceReturn.invoice),
             joinedload(InvoiceReturn.refund_payment)
         ).filter(InvoiceReturn.id == return_id).first()
+
+    def update_return_status(
+        self,
+        return_id: int,
+        new_status: str,
+        payment_method: Optional[str] = None,
+        notes: Optional[str] = None
+    ) -> InvoiceReturn:
+        """
+        Update return status between pending_refund and refunded.
+
+        When changing to 'refunded':
+        - Creates Payment record if not exists
+        - Reduces invoice.remaining_amount
+
+        When changing to 'pending_refund':
+        - Deletes Payment record
+        - Restores invoice.remaining_amount
+
+        Args:
+            return_id: Return ID
+            new_status: New status (pending_refund or refunded)
+            payment_method: Payment method (required when changing to refunded)
+            notes: Optional notes for status change
+
+        Returns:
+            Updated InvoiceReturn object
+
+        Raises:
+            ValueError: If validation fails
+        """
+        # Validate status
+        if new_status not in ['pending_refund', 'refunded']:
+            raise ValueError("Trạng thái phải là 'pending_refund' hoặc 'refunded'")
+
+        # Get return with relationships
+        invoice_return = self.db.query(InvoiceReturn).options(
+            joinedload(InvoiceReturn.invoice),
+            joinedload(InvoiceReturn.refund_payment)
+        ).filter(InvoiceReturn.id == return_id).first()
+
+        if not invoice_return:
+            raise ValueError(f"Không tìm thấy phiếu hoàn trả với ID {return_id}")
+
+        old_status = invoice_return.status
+
+        # No change
+        if old_status == new_status:
+            return invoice_return
+
+        invoice = invoice_return.invoice
+
+        # Transition: pending_refund -> refunded
+        if old_status == 'pending_refund' and new_status == 'refunded':
+            if not payment_method:
+                raise ValueError("Phương thức thanh toán là bắt buộc khi chuyển sang trạng thái 'refunded'")
+
+            # Step 1: Apply credit for returned goods (reduces what customer owes)
+            invoice.remaining_amount -= invoice_return.refund_amount
+            # Example: 23M - 32M = -9M (shop owes customer 9M)
+
+            # Step 2: Calculate net settlement amount (actual cash to pay customer)
+            # If remaining is negative, shop owes customer -> settlement needed
+            settlement_amount = abs(min(0, invoice.remaining_amount))
+            # Example: abs(min(0, -9M)) = 9M (cash shop needs to pay)
+
+            # Step 3: Create settlement payment (if shop owes customer)
+            if settlement_amount > 0:
+                if not invoice_return.refund_payment_id:
+                    # Create payment for SETTLEMENT amount (not full refund amount!)
+                    settlement_payment = self._create_refund_payment(
+                        invoice=invoice,
+                        refund_amount=settlement_amount,  # Actual cash out
+                        payment_method=payment_method,
+                        reason= f"Settlement for return {invoice_return.return_number}: {invoice_return.reason}",
+                        return_number=invoice_return.return_number
+                    )
+                    invoice_return.refund_payment_id = settlement_payment.id
+
+                # Step 4: Allocate settlement payment
+                self._allocate_settlement_to_invoice(
+                    invoice=invoice,
+                    settlement_amount=settlement_amount
+                )
+                # After allocation: refunded_amount += 9M, remaining = 0
+
+            # Step 5: Update invoice status
+            if invoice.remaining_amount <= 0.01:  # Float tolerance
+                invoice.status = 'paid'
+                invoice.remaining_amount = 0  # Clean up float errors
+            elif invoice.remaining_amount > 0:
+                invoice.status = 'pending'
+
+        # Transition: refunded -> pending_refund (BLOCKED)
+        elif old_status == 'refunded' and new_status == 'pending_refund':
+            raise ValueError("Không thể hủy hoàn tiền khi đã xác nhận hoàn tiền (đã xuất quỹ).")
+
+        # Update status
+        invoice_return.status = new_status
+
+        # Add notes
+        if notes:
+            status_note = f"[Thay đổi trạng thái: {old_status} -> {new_status}] {notes}"
+            if invoice_return.notes:
+                invoice_return.notes += f"\n{status_note}"
+            else:
+                invoice_return.notes = status_note
+
+        self.db.commit()
+        self.db.refresh(invoice_return)
+        return invoice_return
 
     def get_available_return_quantities(self, invoice_id: int) -> List[Dict]:
         """
@@ -457,6 +560,45 @@ class InvoiceReturnService:
                 if product:
                     product.stock_quantity += item_data['quantity_returned']
 
+    def _allocate_settlement_to_invoice(self, invoice: Invoice, settlement_amount: float) -> None:
+        """
+        Allocate settlement payment to invoice.
+
+        Settlement = actual cash paid to customer to clear negative balance.
+        This is different from the credit for returned goods.
+
+        Args:
+            settlement_amount: Positive value of cash paid to customer (e.g., 9M)
+        """
+        # Update invoice financial fields
+        invoice.refunded_amount += settlement_amount  # Track cash OUT
+        invoice.remaining_amount += settlement_amount  # Clear the negative balance
+        # Example: refunded_amount = 0 + 9M = 9M
+        #          remaining_amount = -9M + 9M = 0 ✓
+
+        invoice.updated_at = get_vn_time()
+
+        # Clean up float errors
+        if abs(invoice.remaining_amount) <= 0.01:
+            invoice.remaining_amount = 0
+
+        self.db.flush()
+
+    def _reverse_settlement_allocation(self, invoice: Invoice, settlement_amount: float) -> None:
+        """
+        Reverse a settlement payment allocation.
+
+        Args:
+            settlement_amount: Positive value of settlement being reversed
+        """
+        invoice.refunded_amount -= settlement_amount
+        invoice.remaining_amount -= settlement_amount
+        # Example: refunded_amount = 9M - 9M = 0
+        #          remaining_amount = 0 - 9M = -9M (shop owes customer again)
+
+        invoice.updated_at = get_vn_time()
+        self.db.flush()
+
     def _create_refund_payment(
         self,
         invoice: Invoice,
@@ -470,7 +612,7 @@ class InvoiceReturnService:
 
         Args:
             invoice: Invoice object
-            refund_amount: Amount to refund (positive value)
+            refund_amount: Amount to refund (positive value) - SETTLEMENT AMOUNT
             payment_method: Payment method
             reason: Return reason
             return_number: Return number for reference
@@ -482,7 +624,7 @@ class InvoiceReturnService:
         payment = Payment(
             payment_number=f"REFUND-{return_number}",
             customer_id=invoice.customer_id,
-            amount=-refund_amount,  # NEGATIVE amount
+            amount=-refund_amount,  # NEGATIVE amount (Cash OUT)
             payment_method=payment_method,
             notes=f"[HOÀN TRẢ] {reason}",
             payment_date=get_vn_time()
@@ -498,20 +640,7 @@ class InvoiceReturnService:
             notes=f"Hoàn trả: {return_number}"
         )
         self.db.add(allocation)
-
-        # Update invoice amounts
-        # KHÔNG thay đổi paid_amount vì negative payment chỉ để ghi nhận
-        # CHỈ giảm remaining_amount vì hoàn trả = giảm nợ thực tế
-        invoice.remaining_amount -= refund_amount
-
-        # Update invoice status based on remaining_amount
-        if invoice.remaining_amount <= 0.01:  # Float tolerance
-            invoice.status = 'paid'
-        elif invoice.remaining_amount > 0:
-            invoice.status = 'pending'
-        # Note: Nếu remaining < 0, nghĩa là cần hoàn lại tiền cho khách
-        # Nhưng vẫn để status = 'paid' vì hóa đơn đã hoàn tất
-
+        
         return payment
 
     def _generate_return_number(self) -> str:

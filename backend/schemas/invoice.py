@@ -92,7 +92,9 @@ class Invoice(BaseModel):
     total: float
     # Payment tracking
     paid_amount: float = 0
+    refunded_amount: float = 0
     remaining_amount: float
+    net_payment_amount: Optional[float] = None
     payment_status: Optional[str] = None  # 'unpaid', 'partial', 'paid' (computed from model)
     # Returns tracking
     has_returns: Optional[bool] = None  # Computed from model

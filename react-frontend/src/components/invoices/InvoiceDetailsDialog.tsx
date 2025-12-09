@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { formatCurrency, formatDate } from "@/lib/utils"
 import type { Invoice } from "@/types"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
@@ -37,14 +38,30 @@ interface InvoiceDetailsDialogProps {
     onOpenChange: (open: boolean) => void
 }
 
+import { invoiceService } from "@/services/invoices"
+
+// ... imports remain the same
+
 export function InvoiceDetailsDialog({
-    invoice,
+    invoice: initialInvoice,
     open,
     onOpenChange,
 }: InvoiceDetailsDialogProps) {
     const queryClient = useQueryClient()
     const [createReturnDialogOpen, setCreateReturnDialogOpen] = useState(false)
     const [downloadingReturn, setDownloadingReturn] = useState<number | null>(null)
+    const [updatingReturnStatus, setUpdatingReturnStatus] = useState<number | null>(null)
+
+    // Fetch fresh invoice data to ensure live updates (e.g. status, payments)
+    const { data: fetchedInvoice } = useQuery({
+        queryKey: ['invoices', initialInvoice?.id],
+        queryFn: () => invoiceService.getById(initialInvoice!.id),
+        enabled: !!initialInvoice?.id && open,
+        initialData: initialInvoice
+    })
+
+    // Use fetched invoice if available, otherwise initial
+    const invoice = fetchedInvoice || initialInvoice
 
     // Fetch payment allocations for this invoice
     const { data: paymentAllocations, isLoading: isLoadingPayments } = useQuery({
@@ -56,30 +73,77 @@ export function InvoiceDetailsDialog({
     // Fetch returns for this invoice
     const { data: invoiceReturns, isLoading: isLoadingReturns } = useInvoiceReturns(open ? invoice?.id || null : null)
 
-    // Calculate total returned amount
-    const totalReturnedAmount = invoiceReturns?.reduce((sum, ret) => sum + ret.refund_amount, 0) || 0
+
 
     // Handle PDF download
     const handleDownloadReturnPdf = async (returnId: number) => {
         setDownloadingReturn(returnId)
         try {
             const blob = await invoiceReturnService.generateReturnPdf(returnId)
-            const url = URL.createObjectURL(blob)
+
+            // Create download link
+            const url = window.URL.createObjectURL(blob)
             const link = document.createElement('a')
             link.href = url
             link.download = `return_${returnId}.pdf`
+            document.body.appendChild(link)
             link.click()
-            URL.revokeObjectURL(url)
-            toast.success('Đã tải phiếu hoàn trả PDF')
+            document.body.removeChild(link)
+            window.URL.revokeObjectURL(url)
 
-            // Invalidate queries to refresh return data with updated exported_at
-            queryClient.invalidateQueries({ queryKey: ['invoice-returns'] })
-            queryClient.invalidateQueries({ queryKey: ['customer-returns'] })
+            toast.success('Đã tải xuống PDF')
         } catch (error: any) {
-            const errorMsg = error?.response?.data?.detail || 'Không thể tạo PDF'
+            const errorMsg = error?.response?.data?.detail || 'Không thể tải PDF'
             toast.error(errorMsg)
         } finally {
             setDownloadingReturn(null)
+        }
+    }
+
+    // Handle status update
+    const handleUpdateReturnStatus = async (
+        returnId: number,
+        newStatus: 'pending_refund' | 'refunded'
+    ) => {
+        let paymentMethod: string | undefined
+
+        // If changing to refunded, need payment method
+        if (newStatus === 'refunded') {
+            const method = window.prompt(
+                'Phương thức hoàn tiền:\n1 = Tiền mặt\n2 = Chuyển khoản\n3 = Thẻ',
+                '1'
+            )
+            if (!method) return
+            paymentMethod = method === '1' ? 'cash' : method === '2' ? 'transfer' : 'card'
+        }
+
+        setUpdatingReturnStatus(returnId)
+        try {
+            await invoiceReturnService.updateStatus(returnId, {
+                status: newStatus,
+                payment_method: paymentMethod
+            })
+
+            toast.success(
+                newStatus === 'refunded'
+                    ? 'Đã xác nhận hoàn tiền'
+                    : 'Đã chuyển về chưa hoàn tiền'
+            )
+
+            // Force refetch invoice details and payments immediately
+            await Promise.all([
+                queryClient.refetchQueries({ queryKey: ['invoices', initialInvoice?.id] }),
+                queryClient.refetchQueries({ queryKey: ['invoice-payments', initialInvoice?.id] }),
+                queryClient.invalidateQueries({ queryKey: ['invoice-returns'] }),
+                queryClient.invalidateQueries({ queryKey: ['customer-returns'] }),
+                queryClient.invalidateQueries({ queryKey: ['invoices'] })
+            ])
+
+        } catch (error: any) {
+            const errorMsg = error?.response?.data?.detail || 'Không thể cập nhật trạng thái'
+            toast.error(errorMsg)
+        } finally {
+            setUpdatingReturnStatus(null)
         }
     }
 
@@ -162,7 +226,7 @@ export function InvoiceDetailsDialog({
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                        {invoice.items?.map((item, index) => (
+                                        {invoice.items?.map((item, index: number) => (
                                             <TableRow key={item.id || index}>
                                                 <TableCell>{index + 1}</TableCell>
                                                 <TableCell className="font-medium">{item.product_name}</TableCell>
@@ -215,29 +279,80 @@ export function InvoiceDetailsDialog({
                     {/* Tab: Payments */}
                     <TabsContent value="payments" className="space-y-4 py-4 h-[550px] overflow-y-auto">
                         <div className="space-y-4">
-                            {/* Payment summary */}
-                            <div className="grid grid-cols-4 gap-4 p-4 bg-muted/50 rounded-lg">
-                                <div>
-                                    <p className="text-sm text-muted-foreground">Tổng hóa đơn</p>
-                                    <p className="text-lg font-semibold">{formatCurrency(invoice.total)}</p>
+                            {/* Enhanced Payment Summary */}
+                            <div className="space-y-4 p-4 bg-muted/50 rounded-lg">
+                                {/* Row 1: Basic amounts */}
+                                <div className="grid grid-cols-3 gap-4 pb-4 border-b">
+                                    <div>
+                                        <p className="text-sm text-muted-foreground">Tổng hóa đơn</p>
+                                        <p className="text-lg font-semibold">{formatCurrency(invoice.total)}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-sm text-muted-foreground">Tiền khách trả</p>
+                                        <p className="text-lg font-semibold text-emerald-600">
+                                            {formatCurrency(invoice.paid_amount || 0)}
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <p className="text-sm text-muted-foreground">Tiền đã hoàn lại</p>
+                                        <p className="text-lg font-semibold text-orange-600">
+                                            {formatCurrency(invoice.refunded_amount || 0)}
+                                        </p>
+                                    </div>
                                 </div>
-                                <div>
-                                    <p className="text-sm text-muted-foreground">Đã thanh toán</p>
-                                    <p className="text-lg font-semibold text-emerald-600">
-                                        {formatCurrency(invoice.paid_amount || 0)}
-                                    </p>
-                                </div>
-                                <div>
-                                    <p className="text-sm text-muted-foreground">Đã hoàn trả</p>
-                                    <p className="text-lg font-semibold text-red-600">
-                                        {formatCurrency(totalReturnedAmount)}
-                                    </p>
-                                </div>
-                                <div>
-                                    <p className="text-sm text-muted-foreground">Còn lại</p>
-                                    <p className="text-lg font-semibold text-amber-600">
-                                        {formatCurrency(invoice.remaining_amount || 0)}
-                                    </p>
+
+                                {/* Row 2: Net position (highlighted) */}
+                                <div className="grid grid-cols-2 gap-4">
+                                    {/* Net Cash Flow */}
+                                    <div className="bg-background p-4 rounded-lg border-2 border-primary/30 shadow-sm">
+                                        <p className="text-sm font-medium text-muted-foreground mb-1">
+                                            💰 Thanh toán ròng
+                                        </p>
+                                        <p className={`text-2xl font-bold ${(invoice.net_payment_amount || (invoice.paid_amount - (invoice.refunded_amount || 0))) > 0
+                                            ? 'text-emerald-600'
+                                            : (invoice.net_payment_amount || (invoice.paid_amount - (invoice.refunded_amount || 0))) < 0
+                                                ? 'text-red-600'
+                                                : 'text-gray-600'
+                                            }`}>
+                                            {formatCurrency(
+                                                invoice.net_payment_amount !== undefined
+                                                    ? invoice.net_payment_amount
+                                                    : (invoice.paid_amount - (invoice.refunded_amount || 0))
+                                            )}
+                                        </p>
+                                        <p className="text-xs text-muted-foreground mt-1">
+                                            Khách trả - Đã hoàn
+                                        </p>
+                                    </div>
+
+                                    {/* Remaining Amount */}
+                                    <div className="bg-background p-4 rounded-lg border-2 border-primary/30 shadow-sm">
+                                        <p className="text-sm font-medium text-muted-foreground mb-1">
+                                            {invoice.remaining_amount >= 0 ? '📊 Còn nợ' : '⚠️ Shop nợ khách'}
+                                        </p>
+                                        <p className={`text-2xl font-bold ${invoice.remaining_amount > 0
+                                            ? 'text-amber-600'
+                                            : invoice.remaining_amount < 0
+                                                ? 'text-red-600'
+                                                : 'text-emerald-600'
+                                            }`}>
+                                            {invoice.remaining_amount >= 0
+                                                ? formatCurrency(invoice.remaining_amount || 0)
+                                                : `−${formatCurrency(Math.abs(invoice.remaining_amount))}`
+                                            }
+                                        </p>
+                                        {invoice.remaining_amount < 0 && (
+                                            <p className="text-xs text-red-600 mt-1 flex items-center gap-1 font-medium">
+                                                <AlertTriangle className="h-3 w-3" />
+                                                Cần trả lại tiền cho khách
+                                            </p>
+                                        )}
+                                        {invoice.remaining_amount === 0 && (
+                                            <p className="text-xs text-emerald-600 mt-1">
+                                                ✓ Đã thanh toán đủ
+                                            </p>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
 
@@ -335,13 +450,49 @@ export function InvoiceDetailsDialog({
                                         <div key={returnItem.id} className="border rounded-lg p-4 space-y-3">
                                             <div className="flex items-start justify-between">
                                                 <div className="space-y-1">
-                                                    <div className="flex items-center gap-2">
+                                                    <div className="flex items-center gap-2 flex-wrap">
                                                         <span className="font-semibold">{returnItem.return_number}</span>
+
+                                                        {/* Status Badge */}
+                                                        <Badge
+                                                            variant={returnItem.status === 'refunded' ? 'default' : 'secondary'}
+                                                            className={
+                                                                returnItem.status === 'refunded'
+                                                                    ? 'bg-emerald-100 text-emerald-800'
+                                                                    : 'bg-amber-100 text-amber-800'
+                                                            }
+                                                        >
+                                                            {returnItem.status === 'refunded' ? 'Đã hoàn tiền' : 'Chưa hoàn tiền'}
+                                                        </Badge>
+
                                                         {returnItem.is_full_return && (
-                                                            <span className="text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded">
+                                                            <Badge variant="outline" className="bg-blue-50 text-blue-700">
                                                                 Hoàn trả toàn bộ
-                                                            </span>
+                                                            </Badge>
                                                         )}
+
+                                                        {/* Status Change Button - Only show if NOT refunded */}
+                                                        {returnItem.status !== 'refunded' && (
+                                                            <Button
+                                                                size="sm"
+                                                                variant="outline"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation()
+                                                                    handleUpdateReturnStatus(
+                                                                        returnItem.id,
+                                                                        'refunded'
+                                                                    )
+                                                                }}
+                                                                disabled={updatingReturnStatus === returnItem.id}
+                                                            >
+                                                                {updatingReturnStatus === returnItem.id ? (
+                                                                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                                                                ) : null}
+                                                                Xác nhận đã hoàn tiền
+                                                            </Button>
+                                                        )}
+
+                                                        {/* PDF Button */}
                                                         <Button
                                                             size="sm"
                                                             variant="outline"
@@ -380,6 +531,37 @@ export function InvoiceDetailsDialog({
                                                     <p className="text-muted-foreground">
                                                         <span className="font-medium">Ghi chú:</span> {returnItem.notes}
                                                     </p>
+                                                )}
+
+                                                {/* Suggested Refund Amount for Pending Returns */}
+                                                {returnItem.status === 'pending_refund' && (
+                                                    <div className="mt-2 bg-blue-50 p-2 rounded border border-blue-100 flex items-start gap-2">
+                                                        <AlertTriangle className="h-4 w-4 text-blue-600 mt-0.5" />
+                                                        <div className="text-sm">
+                                                            <p className="font-semibold text-blue-700">Gợi ý xử lý:</p>
+                                                            {(() => {
+                                                                // Calculate projected remaining if this return is processed
+                                                                // invoice.remaining_amount currently allows for this credit if it hasn't been applied?
+                                                                // No, if pending, remaining_amount does NOT include this credit yet.
+                                                                const projectedRemaining = invoice.remaining_amount - returnItem.refund_amount
+
+                                                                if (projectedRemaining < 0) {
+                                                                    const settlementNeeded = Math.abs(projectedRemaining)
+                                                                    return (
+                                                                        <span>
+                                                                            Shop cần hoàn lại tiền mặt cho khách: <span className="font-bold text-red-600">{formatCurrency(settlementNeeded)}</span>
+                                                                        </span>
+                                                                    )
+                                                                } else {
+                                                                    return (
+                                                                        <span>
+                                                                            Khấu trừ vào nợ. Khách vẫn còn nợ: <span className="font-bold text-amber-600">{formatCurrency(projectedRemaining)}</span>. Không cần chi tiền mặt.
+                                                                        </span>
+                                                                    )
+                                                                }
+                                                            })()}
+                                                        </div>
+                                                    </div>
                                                 )}
                                             </div>
 

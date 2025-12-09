@@ -48,8 +48,6 @@ export function CreateReturnDialog({ invoiceId, open, onOpenChange }: CreateRetu
   const [reasonError, setReasonError] = useState(false);
   const [refundMode, setRefundMode] = useState<'auto' | 'manual'>('auto');
   const [manualRefundAmount, setManualRefundAmount] = useState('');
-  const [createRefundPayment, setCreateRefundPayment] = useState(true);
-  const [paymentMethod, setPaymentMethod] = useState('cash');
   const [notes, setNotes] = useState('');
 
   // Initialize return items state when available quantities load
@@ -75,8 +73,6 @@ export function CreateReturnDialog({ invoiceId, open, onOpenChange }: CreateRetu
       setReasonError(false);
       setRefundMode('auto');
       setManualRefundAmount('');
-      setCreateRefundPayment(true);
-      setPaymentMethod('cash');
       setNotes('');
       setErrors({});
     }
@@ -159,8 +155,6 @@ export function CreateReturnDialog({ invoiceId, open, onOpenChange }: CreateRetu
           return_items: returnItemsData,
           reason: reason.trim(),
           refund_amount: refundAmount,
-          create_refund_payment: createRefundPayment,
-          payment_method: paymentMethod,
           notes: notes.trim() || undefined,
         },
       },
@@ -381,33 +375,6 @@ export function CreateReturnDialog({ invoiceId, open, onOpenChange }: CreateRetu
                   onChange={(e) => setManualRefundAmount(e.target.value)}
                   placeholder="Nhập số tiền hoàn lại"
                 />
-              )}
-
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="create-payment"
-                  checked={createRefundPayment}
-                  onCheckedChange={(checked) => setCreateRefundPayment(checked as boolean)}
-                />
-                <Label htmlFor="create-payment" className="font-normal">
-                  Tạo phiếu hoàn tiền
-                </Label>
-              </div>
-
-              {createRefundPayment && (
-                <div className="space-y-2 pl-6">
-                  <Label htmlFor="payment-method">Phương thức thanh toán</Label>
-                  <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-                    <SelectTrigger id="payment-method">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="cash">Tiền mặt</SelectItem>
-                      <SelectItem value="transfer">Chuyển khoản</SelectItem>
-                      <SelectItem value="card">Thẻ</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
               )}
             </div>
 

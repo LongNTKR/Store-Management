@@ -110,7 +110,9 @@ export interface Invoice {
     total: number
     // Payment tracking
     paid_amount: number
+    refunded_amount: number
     remaining_amount: number
+    net_payment_amount?: number
     payment_status?: 'unpaid' | 'partial' | 'paid'
     // Returns tracking
     has_returns?: boolean
