@@ -130,7 +130,9 @@ class Statistics(BaseModel):
     pending_non_exported_invoices: int = 0  # Count of pending invoices that are not exported
 
     # Revenue totals (simplified - no breakdown by export status)
-    total_revenue: float  # Sum of paid + pending invoice totals
+    total_revenue: float  # Gross revenue: Sum of paid + pending invoice totals (before deducting returns)
+    total_refunded: float = 0  # NEW: Total value of returned goods (sum of total_returned_amount)
+    total_net_revenue: float = 0  # NEW: Net revenue after deducting returns (total_revenue - total_refunded)
     collected_amount: float = 0  # Total amount collected (sum of paid_amount)
     outstanding_debt: float = 0  # Total amount outstanding (sum of remaining_amount)
 

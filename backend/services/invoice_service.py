@@ -1246,10 +1246,17 @@ class InvoiceService:
         - Export Status: Overall exported/non-exported counts
         - Pending Breakdown: How many pending invoices are exported vs non-exported
         - Revenue:
-          * Total Revenue: ONLY from exported invoices (paid + pending with exported_at set)
+          * Total Revenue (Gross): ONLY from exported invoices (paid + pending with exported_at set)
+          * Total Refunded: Value of returned goods (sum of total_returned_amount)
+          * Total Net Revenue: Net revenue after deducting returns (total_revenue - total_refunded)
           * Collected Amount: Sum of paid_amount (all statuses)
           * Outstanding Debt: Sum of remaining_amount (all statuses)
-        - Debt Tracking: Invoices and customers with outstanding debt
+        - Debt Tracking: Invoices and customers with outstanding debt (ONLY exported invoices)
+
+        IMPORTANT FIXES:
+        - customers_with_debt and invoices_with_debt now correctly filter by exported_at
+        - Revenue metrics now include net_revenue calculation (deducting returns)
+        - Average order value now uses net_revenue instead of gross revenue
 
         Args:
             start_date: Start date filter
@@ -1339,12 +1346,14 @@ class InvoiceService:
         ).first()
 
         # Query for customers with debt (separate query for clarity)
+        # FIX: Add exported_at filter to match business rule "only exported invoices count toward debt"
         customers_with_debt_query = self.db.query(
             func.count(distinct(Invoice.customer_id))
         ).filter(
             Invoice.status.in_(['pending', 'paid']),
             Invoice.remaining_amount > 0,
-            Invoice.customer_id.isnot(None)  # Exclude walk-in customers
+            Invoice.customer_id.isnot(None),  # Exclude walk-in customers
+            Invoice.exported_at.isnot(None)   # FIX: Only count exported invoices
         )
 
         if start_date:
@@ -1365,16 +1374,35 @@ class InvoiceService:
         outstanding_debt = float(results.outstanding_debt or 0)
         paid_invoices = results.paid_invoices or 0
 
-        # Count invoices with debt (no export filter)
+        # Count invoices with debt
+        # FIX: Add exported_at filter to match business rule
         invoices_with_debt = self.db.query(Invoice).filter(
             Invoice.status.in_(['pending', 'paid']),
-            Invoice.remaining_amount > 0
+            Invoice.remaining_amount > 0,
+            Invoice.exported_at.isnot(None)  # FIX: Only count exported invoices
         )
         if start_date:
             invoices_with_debt = invoices_with_debt.filter(Invoice.created_at >= start_date)
         if end_date:
             invoices_with_debt = invoices_with_debt.filter(Invoice.created_at <= end_date)
         invoices_with_debt_count = invoices_with_debt.count()
+
+        # Calculate net revenue (total - returns) for exported invoices
+        # FIX: Query exported invoices to calculate net_amount (property can't be queried in SQL)
+        exported_invoices_query = self.db.query(Invoice).filter(
+            Invoice.status.in_(['pending', 'paid']),
+            Invoice.exported_at.isnot(None)
+        )
+        if start_date:
+            exported_invoices_query = exported_invoices_query.filter(Invoice.created_at >= start_date)
+        if end_date:
+            exported_invoices_query = exported_invoices_query.filter(Invoice.created_at <= end_date)
+
+        exported_invoices = exported_invoices_query.all()
+
+        # Calculate net revenue and refunds
+        total_refunded = sum(inv.total_returned_amount for inv in exported_invoices)
+        total_net_revenue = sum(inv.net_amount for inv in exported_invoices)
 
         return {
             # Invoice counts by status (all 4 statuses)
@@ -1393,15 +1421,17 @@ class InvoiceService:
             'pending_non_exported_invoices': results.pending_non_exported_invoices or 0,
 
             # Revenue totals (paid + pending only) - simplified, no breakdown
-            'total_revenue': total_revenue,
+            'total_revenue': total_revenue,  # Gross revenue (before deducting returns)
+            'total_refunded': total_refunded,  # NEW: Total value of returned goods
+            'total_net_revenue': total_net_revenue,  # NEW: Net revenue after deducting returns
             'collected_amount': collected_amount,
             'outstanding_debt': outstanding_debt,
 
             # Legacy fields (keep for backward compatibility)
             'pending_revenue': float(results.pending_revenue or 0),
-            'average_order_value': total_revenue / total_invoices if total_invoices > 0 else 0,
+            'average_order_value': total_net_revenue / total_invoices if total_invoices > 0 else 0,  # FIX: Use net revenue for AOV
 
-            # Debt tracking
+            # Debt tracking (all fixed to use exported_at filter)
             'total_debt': outstanding_debt,  # Populate existing field
             'invoices_with_debt': invoices_with_debt_count,
             'customers_with_debt': customers_with_debt,
