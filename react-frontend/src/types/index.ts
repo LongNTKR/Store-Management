@@ -116,8 +116,10 @@ export interface Invoice {
     payment_status?: 'unpaid' | 'partial' | 'paid'
     // Returns tracking
     has_returns?: boolean
-    total_returned_amount?: number
-    net_amount?: number
+    total_returned_amount?: number  // Only refunded returns
+    total_pending_return_amount?: number  // NEW: Pending returns not yet refunded
+    net_amount?: number  // Actual net revenue (only refunded returns deducted)
+    projected_net_amount?: number  // NEW: Projected net if all pending returns processed
     // Status
     status: 'pending' | 'paid' | 'cancelled' | 'processing'
     payment_method?: string

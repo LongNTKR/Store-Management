@@ -331,8 +331,13 @@ export function InvoiceDetailsDialog({
 
                                     {/* Net Revenue (Actual Revenue after Returns) */}
                                     <div className="bg-background p-4 rounded-lg border-2 border-purple-300 shadow-sm">
-                                        <p className="text-sm font-medium text-muted-foreground mb-1">
-                                            💎 Doanh thu thực tế
+                                        <p className="text-sm font-medium text-muted-foreground mb-1 flex items-center justify-between">
+                                            <span>💎 Doanh thu thực tế</span>
+                                            {invoice.total_pending_return_amount && invoice.total_pending_return_amount > 0 && (
+                                                <Badge variant="outline" className="bg-amber-50 text-amber-700 text-[10px] px-1.5 py-0">
+                                                    Có pending
+                                                </Badge>
+                                            )}
                                         </p>
                                         <p className={`text-2xl font-bold ${
                                             (invoice.net_amount !== undefined ? invoice.net_amount : (invoice.total - (invoice.total_returned_amount || 0))) > 0
@@ -350,6 +355,19 @@ export function InvoiceDetailsDialog({
                                         <p className="text-xs text-muted-foreground mt-1">
                                             Tổng HĐ - Đã hoàn trả
                                         </p>
+                                        {invoice.total_pending_return_amount && invoice.total_pending_return_amount > 0 && (
+                                            <>
+                                                <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
+                                                    <AlertTriangle className="h-3 w-3" />
+                                                    Chờ hoàn: {formatCurrency(invoice.total_pending_return_amount)}
+                                                </p>
+                                                {invoice.projected_net_amount !== undefined && (
+                                                    <p className="text-xs text-blue-600 mt-0.5 ml-4">
+                                                        → Dự kiến: {formatCurrency(invoice.projected_net_amount)}
+                                                    </p>
+                                                )}
+                                            </>
+                                        )}
                                     </div>
 
                                     {/* Remaining Amount */}
