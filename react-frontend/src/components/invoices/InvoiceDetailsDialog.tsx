@@ -305,7 +305,7 @@ export function InvoiceDetailsDialog({
                                 </div>
 
                                 {/* Row 2: Net position (highlighted) */}
-                                <div className="grid grid-cols-2 gap-4">
+                                <div className="grid grid-cols-3 gap-4">
                                     {/* Net Cash Flow */}
                                     <div className="bg-background p-4 rounded-lg border-2 border-primary/30 shadow-sm">
                                         <p className="text-sm font-medium text-muted-foreground mb-1">
@@ -325,6 +325,29 @@ export function InvoiceDetailsDialog({
                                         </p>
                                         <p className="text-xs text-muted-foreground mt-1">
                                             Khách trả - Đã hoàn
+                                        </p>
+                                    </div>
+
+                                    {/* Net Revenue (Actual Revenue after Returns) */}
+                                    <div className="bg-background p-4 rounded-lg border-2 border-purple-300 shadow-sm">
+                                        <p className="text-sm font-medium text-muted-foreground mb-1">
+                                            💎 Doanh thu thực tế
+                                        </p>
+                                        <p className={`text-2xl font-bold ${
+                                            (invoice.net_amount !== undefined ? invoice.net_amount : (invoice.total - (invoice.total_returned_amount || 0))) > 0
+                                                ? 'text-purple-600'
+                                                : (invoice.net_amount !== undefined ? invoice.net_amount : (invoice.total - (invoice.total_returned_amount || 0))) < 0
+                                                    ? 'text-red-600'
+                                                    : 'text-gray-600'
+                                        }`}>
+                                            {formatCurrency(
+                                                invoice.net_amount !== undefined
+                                                    ? invoice.net_amount
+                                                    : (invoice.total - (invoice.total_returned_amount || 0))
+                                            )}
+                                        </p>
+                                        <p className="text-xs text-muted-foreground mt-1">
+                                            Tổng HĐ - Đã hoàn trả
                                         </p>
                                     </div>
 
