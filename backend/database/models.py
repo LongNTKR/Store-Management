@@ -241,18 +241,46 @@ class Invoice(Base):
 
     @property
     def total_returned_amount(self) -> float:
-        """Total amount returned from all returns."""
-        return sum(ret.refund_amount for ret in self.returns)
+        """Total amount actually refunded (only returns with status='refunded').
+
+        This represents the actual value of goods that have been returned AND refunded.
+        Does NOT include pending returns (status='pending_refund').
+        """
+        return sum(ret.refund_amount for ret in self.returns
+                   if ret.status == 'refunded')
+
+    @property
+    def total_pending_return_amount(self) -> float:
+        """Total amount pending refund (only returns with status='pending_refund').
+
+        This represents the value of goods that customers want to return
+        but have NOT been refunded yet.
+        """
+        return sum(ret.refund_amount for ret in self.returns
+                   if ret.status == 'pending_refund')
 
     @property
     def has_returns(self) -> bool:
-        """Check if invoice has any returns."""
+        """Check if invoice has any returns (refunded or pending)."""
         return len(self.returns) > 0
 
     @property
     def net_amount(self) -> float:
-        """Net amount = total - total_returned_amount."""
+        """Net amount = total - total_returned_amount.
+
+        This is the ACTUAL net revenue after deducting ONLY refunded returns.
+        Does NOT deduct pending returns (they haven't been refunded yet).
+        """
         return self.total - self.total_returned_amount
+
+    @property
+    def projected_net_amount(self) -> float:
+        """Projected net amount if all pending returns are processed.
+
+        This shows what the net amount WILL BE if all pending returns are confirmed.
+        Formula: total - total_returned_amount - total_pending_return_amount
+        """
+        return self.total - self.total_returned_amount - self.total_pending_return_amount
 
     @property
     def net_payment_amount(self) -> float:
