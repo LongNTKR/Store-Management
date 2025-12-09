@@ -196,11 +196,14 @@ export interface InvoiceReturn {
     return_number: string
     invoice_id: number
     invoice_number?: string
+    refund_payment_id: number | null
     reason: string
     refund_amount: number
     is_full_return: boolean
+    status: 'pending_refund' | 'refunded'
     created_at: string
     created_by?: string
     notes?: string
+    exported_at?: string | null
     return_items: InvoiceReturnItem[]
 }

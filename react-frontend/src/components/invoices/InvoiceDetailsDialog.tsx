@@ -22,9 +22,17 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { paymentService } from "@/services/payments"
 import { useInvoiceReturns } from "@/hooks/useInvoiceReturns"
 import { CreateReturnDialog } from "./CreateReturnDialog"
+
 import { Loader2, Package, FileText, AlertTriangle } from "lucide-react"
 import { invoiceReturnService } from "@/services/invoiceReturns"
 import { toast } from "sonner"
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
 
 const paymentMethodMap: Record<string, string> = {
     cash: 'Tiền mặt',
@@ -49,8 +57,11 @@ export function InvoiceDetailsDialog({
 }: InvoiceDetailsDialogProps) {
     const queryClient = useQueryClient()
     const [createReturnDialogOpen, setCreateReturnDialogOpen] = useState(false)
+
+
     const [downloadingReturn, setDownloadingReturn] = useState<number | null>(null)
     const [updatingReturnStatus, setUpdatingReturnStatus] = useState<number | null>(null)
+    const [refundMethods, setRefundMethods] = useState<Record<number, string>>({})
 
     // Fetch fresh invoice data to ensure live updates (e.g. status, payments)
     const { data: fetchedInvoice } = useQuery({
@@ -101,27 +112,17 @@ export function InvoiceDetailsDialog({
     }
 
     // Handle status update
+    // Handle status update
     const handleUpdateReturnStatus = async (
         returnId: number,
-        newStatus: 'pending_refund' | 'refunded'
+        newStatus: 'pending_refund' | 'refunded',
+        paymentMethod: string = 'cash'
     ) => {
-        let paymentMethod: string | undefined
-
-        // If changing to refunded, need payment method
-        if (newStatus === 'refunded') {
-            const method = window.prompt(
-                'Phương thức hoàn tiền:\n1 = Tiền mặt\n2 = Chuyển khoản\n3 = Thẻ',
-                '1'
-            )
-            if (!method) return
-            paymentMethod = method === '1' ? 'cash' : method === '2' ? 'transfer' : 'card'
-        }
-
         setUpdatingReturnStatus(returnId)
         try {
             await invoiceReturnService.updateStatus(returnId, {
                 status: newStatus,
-                payment_method: paymentMethod
+                payment_method: newStatus === 'refunded' ? paymentMethod : undefined
             })
 
             toast.success(
@@ -136,7 +137,8 @@ export function InvoiceDetailsDialog({
                 queryClient.refetchQueries({ queryKey: ['invoice-payments', initialInvoice?.id] }),
                 queryClient.invalidateQueries({ queryKey: ['invoice-returns'] }),
                 queryClient.invalidateQueries({ queryKey: ['customer-returns'] }),
-                queryClient.invalidateQueries({ queryKey: ['invoices'] })
+                queryClient.invalidateQueries({ queryKey: ['invoices'] }),
+                queryClient.invalidateQueries({ queryKey: ['customer-invoices'] })
             ])
 
         } catch (error: any) {
@@ -146,6 +148,7 @@ export function InvoiceDetailsDialog({
             setUpdatingReturnStatus(null)
         }
     }
+
 
     if (!invoice) return null
 
@@ -473,23 +476,40 @@ export function InvoiceDetailsDialog({
 
                                                         {/* Status Change Button - Only show if NOT refunded */}
                                                         {returnItem.status !== 'refunded' && (
-                                                            <Button
-                                                                size="sm"
-                                                                variant="outline"
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation()
-                                                                    handleUpdateReturnStatus(
-                                                                        returnItem.id,
-                                                                        'refunded'
-                                                                    )
-                                                                }}
-                                                                disabled={updatingReturnStatus === returnItem.id}
-                                                            >
-                                                                {updatingReturnStatus === returnItem.id ? (
-                                                                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                                                                ) : null}
-                                                                Xác nhận đã hoàn tiền
-                                                            </Button>
+                                                            <>
+                                                                <Select
+                                                                    value={refundMethods[returnItem.id] || 'cash'}
+                                                                    onValueChange={(val) => setRefundMethods(prev => ({ ...prev, [returnItem.id]: val }))}
+                                                                >
+                                                                    <SelectTrigger className="w-[130px] h-9">
+                                                                        <SelectValue placeholder="Phương thức" />
+                                                                    </SelectTrigger>
+                                                                    <SelectContent>
+                                                                        <SelectItem value="cash">Tiền mặt</SelectItem>
+                                                                        <SelectItem value="transfer">Chuyển khoản</SelectItem>
+                                                                        <SelectItem value="card">Thẻ</SelectItem>
+                                                                    </SelectContent>
+                                                                </Select>
+
+                                                                <Button
+                                                                    size="sm"
+                                                                    variant="outline"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation()
+                                                                        handleUpdateReturnStatus(
+                                                                            returnItem.id,
+                                                                            'refunded',
+                                                                            refundMethods[returnItem.id] || 'cash'
+                                                                        )
+                                                                    }}
+                                                                    disabled={updatingReturnStatus === returnItem.id}
+                                                                >
+                                                                    {updatingReturnStatus === returnItem.id ? (
+                                                                        <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                                                                    ) : null}
+                                                                    Xác nhận
+                                                                </Button>
+                                                            </>
                                                         )}
 
                                                         {/* PDF Button */}
@@ -601,6 +621,8 @@ export function InvoiceDetailsDialog({
                     open={createReturnDialogOpen}
                     onOpenChange={setCreateReturnDialogOpen}
                 />
+
+
             </DialogContent>
         </Dialog>
     )

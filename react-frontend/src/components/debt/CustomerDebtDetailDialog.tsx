@@ -414,44 +414,97 @@ function InvoiceTabContent({ customerId }: { customerId: number }) {
           <Loader2 className="h-6 w-6 animate-spin" />
         </div>
       ) : combinedList.length > 0 ? (
-        <div className="rounded-md border flex-1 overflow-auto">          
-        <Table>
-          <TableHeader className="sticky top-0 bg-white shadow-sm z-10">
-            <TableRow>
-              <TableHead>Số phiếu</TableHead>
-              <TableHead>Ngày tạo</TableHead>
-              <TableHead className="text-right">Tổng tiền</TableHead>
-              <TableHead className="text-right">Đã thanh toán/hoàn</TableHead>
-              <TableHead className="text-right">Còn lại</TableHead>
-              <TableHead>Trạng thái</TableHead>
-              <TableHead>Trạng thái xuất</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {combinedList.map((item) => {
-              if (item.type === 'return') {
-                // Render Return Row
+        <div className="rounded-md border flex-1 overflow-auto">
+          <Table>
+            <TableHeader className="sticky top-0 bg-white shadow-sm z-10">
+              <TableRow>
+                <TableHead>Số phiếu</TableHead>
+                <TableHead>Ngày tạo</TableHead>
+                <TableHead className="text-right">Tổng tiền</TableHead>
+                <TableHead className="text-right">Đã thanh toán/hoàn</TableHead>
+                <TableHead className="text-right">Còn lại</TableHead>
+                <TableHead>Trạng thái</TableHead>
+                <TableHead>Trạng thái xuất</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {combinedList.map((item) => {
+                if (item.type === 'return') {
+                  // Render Return Row
+                  return (
+                    <TableRow key={`return-${item.id}`} className="bg-red-50/30">
+                      <TableCell className="font-medium">{item.return_number}</TableCell>
+                      <TableCell>{formatDate(item.created_at, 'dd/MM/yyyy')}</TableCell>
+                      <TableCell className="text-right text-red-600 font-medium">
+                        -{formatCurrency(item.refund_amount)}
+                      </TableCell>
+                      <TableCell className="text-right text-red-600">
+                        {item.status === 'refunded' ? `-${formatCurrency(item.refund_amount)}` : '-'}
+                      </TableCell>
+                      <TableCell className="text-right text-slate-400">
+                        -
+                      </TableCell>
+                      <TableCell>
+                        {item.status === 'refunded' ? (
+                          <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-emerald-100 text-emerald-800">
+                            Đã hoàn tiền
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-800">
+                            Chưa hoàn tiền
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {('exported_at' in item && item.exported_at) ? (
+                          <span className="text-xs text-emerald-600" title={formatDate(item.exported_at as string, 'dd/MM/yyyy HH:mm')}>
+                            ✓ Đã xuất
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-700 border border-gray-300">
+                            Chưa xuất
+                          </span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  )
+                }
+
+                // Render Invoice Row (existing logic)
+                const invoice = item
                 return (
-                  <TableRow key={`return-${item.id}`} className="bg-red-50/30">
-                    <TableCell className="font-medium">{item.return_number}</TableCell>
-                    <TableCell>{formatDate(item.created_at, 'dd/MM/yyyy')}</TableCell>
-                    <TableCell className="text-right text-red-600 font-medium">
-                      -{formatCurrency(item.refund_amount)}
+                  <TableRow key={`invoice-${invoice.id}`}>
+                    <TableCell className="font-medium">{invoice.invoice_number}</TableCell>
+                    <TableCell>{formatDate(invoice.created_at, 'dd/MM/yyyy')}</TableCell>
+                    <TableCell className="text-right">{formatCurrency(invoice.total)}</TableCell>
+                    <TableCell className="text-right text-emerald-600">
+                      {formatCurrency(invoice.paid_amount || 0)}
                     </TableCell>
-                    <TableCell className="text-right text-red-600">
-                      -{formatCurrency(item.refund_amount)}
-                    </TableCell>
-                    <TableCell className="text-right text-slate-400">
-                      -
+                    <TableCell className="text-right font-semibold text-amber-600">
+                      {formatCurrency(invoice.remaining_amount || 0)}
                     </TableCell>
                     <TableCell>
-                      <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-red-100 text-red-800">
-                        Hoàn trả
-                      </span>
+                      {invoice.status === 'paid' ? (
+                        <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-emerald-100 text-emerald-800">
+                          Đã thanh toán
+                        </span>
+                      ) : invoice.status === 'processing' ? (
+                        <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-800">
+                          Đang xử lý
+                        </span>
+                      ) : invoice.status === 'cancelled' ? (
+                        <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-red-100 text-red-800">
+                          Đã hủy
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-800">
+                          Chờ thanh toán
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell>
-                      {('exported_at' in item && item.exported_at) ? (
-                        <span className="text-xs text-emerald-600" title={formatDate(item.exported_at as string, 'dd/MM/yyyy HH:mm')}>
+                      {invoice.exported_at ? (
+                        <span className="text-xs text-emerald-600" title={formatDate(invoice.exported_at, 'dd/MM/yyyy HH:mm')}>
                           ✓ Đã xuất
                         </span>
                       ) : (
@@ -462,56 +515,9 @@ function InvoiceTabContent({ customerId }: { customerId: number }) {
                     </TableCell>
                   </TableRow>
                 )
-              }
-
-              // Render Invoice Row (existing logic)
-              const invoice = item
-              return (
-                <TableRow key={`invoice-${invoice.id}`}>
-                  <TableCell className="font-medium">{invoice.invoice_number}</TableCell>
-                  <TableCell>{formatDate(invoice.created_at, 'dd/MM/yyyy')}</TableCell>
-                  <TableCell className="text-right">{formatCurrency(invoice.total)}</TableCell>
-                  <TableCell className="text-right text-emerald-600">
-                    {formatCurrency(invoice.paid_amount || 0)}
-                  </TableCell>
-                  <TableCell className="text-right font-semibold text-amber-600">
-                    {formatCurrency(invoice.remaining_amount || 0)}
-                  </TableCell>
-                  <TableCell>
-                    {invoice.status === 'paid' ? (
-                      <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-emerald-100 text-emerald-800">
-                        Đã thanh toán
-                      </span>
-                    ) : invoice.status === 'processing' ? (
-                      <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-800">
-                        Đang xử lý
-                      </span>
-                    ) : invoice.status === 'cancelled' ? (
-                      <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-red-100 text-red-800">
-                        Đã hủy
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-800">
-                        Chờ thanh toán
-                      </span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {invoice.exported_at ? (
-                      <span className="text-xs text-emerald-600" title={formatDate(invoice.exported_at, 'dd/MM/yyyy HH:mm')}>
-                        ✓ Đã xuất
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-700 border border-gray-300">
-                        Chưa xuất
-                      </span>
-                    )}
-                  </TableCell>
-                </TableRow>
-              )
-            })}
-          </TableBody>
-        </Table>
+              })}
+            </TableBody>
+          </Table>
         </div>
       ) : (
         <div className="text-center py-12 border-2 border-dashed rounded-lg bg-slate-50">
