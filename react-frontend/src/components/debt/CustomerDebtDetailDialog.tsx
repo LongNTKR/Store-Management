@@ -552,20 +552,37 @@ function InvoiceTabContent({ customerId }: { customerId: number }) {
                   return renderReturnRow(item, false)
                 }
 
-                // Render Invoice Row
+                  // Render Invoice Row
                 const invoice = item as Invoice
                 const childrenReturns = returnsByInvoiceId[invoice.id]
+
+                // CHECK UNRESOLVED STATE
+                // 1. Invoice is not fully processed (not paid and not cancelled)
+                // 2. OR Invoice has pending returns (not refunded)
+                const isInvoiceIncomplete = invoice.status !== 'paid' && invoice.status !== 'cancelled'
+                const hasPendingReturns = childrenReturns && childrenReturns.some(r => r.status !== 'refunded')
+                const isUnresolved = isInvoiceIncomplete || hasPendingReturns
+
+                // Determine warning message
+                let warningMessage = ''
+                if (isInvoiceIncomplete) warningMessage = 'Hóa đơn chưa hoàn tất thanh toán'
+                else if (hasPendingReturns) warningMessage = 'Có yêu cầu hoàn trả chưa xử lý xong'
 
                 return (
                   <>
                     <TableRow
                       key={`invoice-${invoice.id}`}
-                      className="cursor-pointer hover:bg-muted/50 transition-colors"
+                      className={`cursor-pointer transition-colors ${isUnresolved ? 'bg-amber-50 hover:bg-amber-100' : 'hover:bg-muted/50'}`}
                       onClick={() => handleInvoiceClick(invoice)}
                     >
                       <TableCell className="font-medium">
                         <div className="flex items-center gap-2">
                           {invoice.invoice_number}
+                          {isUnresolved && (
+                            <div title={warningMessage} className="text-amber-600 animate-pulse">
+                              <AlertCircle className="h-4 w-4" />
+                            </div>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell>{formatDate(invoice.created_at, 'dd/MM/yyyy')}</TableCell>
@@ -580,23 +597,25 @@ function InvoiceTabContent({ customerId }: { customerId: number }) {
                         {formatCurrency(invoice.net_amount !== undefined ? invoice.net_amount : (invoice.total - (invoice.total_returned_amount || 0)))}
                       </TableCell>
                       <TableCell>
-                        {invoice.status === 'paid' ? (
-                          <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-emerald-100 text-emerald-800">
-                            Đã thanh toán
-                          </span>
-                        ) : invoice.status === 'processing' ? (
-                          <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-800">
-                            Đang xử lý
-                          </span>
-                        ) : invoice.status === 'cancelled' ? (
-                          <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-red-100 text-red-800">
-                            Đã hủy
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-800">
-                            Chờ thanh toán
-                          </span>
-                        )}
+                        <div className="flex items-center gap-2">
+                          {invoice.status === 'paid' ? (
+                            <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-emerald-100 text-emerald-800">
+                              Đã thanh toán
+                            </span>
+                          ) : invoice.status === 'processing' ? (
+                            <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-800">
+                              Đang xử lý
+                            </span>
+                          ) : invoice.status === 'cancelled' ? (
+                            <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-red-100 text-red-800">
+                              Đã hủy
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-800">
+                              Chờ thanh toán
+                            </span>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell>
                         {invoice.exported_at ? (
