@@ -8,7 +8,7 @@ import { formatCurrency } from '@/lib/utils'
 import {
     Box, Users, FileText, BadgeDollarSign, FilterX, CalendarRange,
     CheckCircle2, Clock, XCircle, Settings, FileCheck, FileWarning,
-    DollarSign, Wallet, TrendingUp, FileX
+    DollarSign, Wallet, TrendingUp, FileX, RefreshCcw, Receipt, UserCheck
 } from 'lucide-react'
 
 // New Components
@@ -30,7 +30,7 @@ export function StatsPage() {
 
     const { data: stats } = useStatistics(dateRange)
     const { data: productPages } = useProducts()
-    const { data: customerPages} = useCustomers()
+    const { data: customerPages } = useCustomers()
 
     const handleDebtorClick = (id: number, name: string) => {
         setSelectedDebtorId(id)
@@ -107,6 +107,13 @@ export function StatsPage() {
                     <Users className="w-4 h-4 text-indigo-600" />
                     <span className="text-sm font-medium text-slate-700">{totalCustomers} Khách hàng</span>
                 </div>
+                <div className="h-4 w-px bg-slate-300" />
+                <div className="flex items-center gap-2">
+                    <Receipt className="w-4 h-4 text-blue-600" />
+                    <span className="text-sm font-medium text-slate-700">
+                        TB/đơn: {formatCurrency(stats?.average_order_value || 0)}
+                    </span>
+                </div>
             </div>
 
             {/* NHÓM 2: Phân tích doanh thu (MỞ RỘNG - quan trọng nhất) */}
@@ -118,31 +125,72 @@ export function StatsPage() {
                     <h2 className="text-2xl font-bold text-emerald-900">💰 Phân tích doanh thu</h2>
                 </div>
 
-                {/* Revenue Summary Cards */}
-                <div className="grid gap-6 md:grid-cols-3 mb-6">
-                    <div className="p-6 bg-white rounded-xl shadow-md border-2 border-emerald-300 hover:shadow-xl transition-shadow">
-                        <div className="flex items-center justify-between mb-3">
+                {/* Revenue Summary Cards - Row 1: Gross metrics */}
+                <div className="grid gap-4 md:grid-cols-3 mb-4">
+                    <div className="p-5 bg-white rounded-xl shadow-md border-2 border-emerald-300 hover:shadow-xl transition-shadow">
+                        <div className="flex items-center justify-between mb-2">
                             <p className="text-sm font-semibold text-slate-600 uppercase tracking-wide">Tổng doanh thu</p>
                             <BadgeDollarSign className="w-5 h-5 text-emerald-600" />
                         </div>
-                        <p className="text-3xl font-bold text-emerald-700 mb-2">{formatCurrency(stats?.total_revenue || 0)}</p>
-                        <p className="text-xs text-slate-500 leading-relaxed">Tổng giá trị các hóa đơn đã xuất file (đã thanh toán + chờ thanh toán)</p>
+                        <p className="text-2xl font-bold text-emerald-700 mb-1">{formatCurrency(stats?.total_revenue || 0)}</p>
+                        <p className="text-xs text-slate-500">Hóa đơn đã xuất (đã TT + chờ TT)</p>
                     </div>
-                    <div className="p-6 bg-white rounded-xl shadow-md border-2 border-green-300 hover:shadow-xl transition-shadow">
-                        <div className="flex items-center justify-between mb-3">
+                    <div className="p-5 bg-white rounded-xl shadow-md border-2 border-red-200 hover:shadow-xl transition-shadow">
+                        <div className="flex items-center justify-between mb-2">
+                            <p className="text-sm font-semibold text-slate-600 uppercase tracking-wide">Đã hoàn trả</p>
+                            <RefreshCcw className="w-5 h-5 text-red-500" />
+                        </div>
+                        <p className="text-2xl font-bold text-red-600 mb-1">-{formatCurrency(stats?.total_refunded || 0)}</p>
+                        <p className="text-xs text-slate-500">Giá trị hàng trả lại</p>
+                    </div>
+                    <div className="p-5 bg-white rounded-xl shadow-md border-2 border-purple-300 hover:shadow-xl transition-shadow">
+                        <div className="flex items-center justify-between mb-2">
+                            <p className="text-sm font-semibold text-slate-600 uppercase tracking-wide">Doanh thu ròng</p>
+                            <DollarSign className="w-5 h-5 text-purple-600" />
+                        </div>
+                        <p className="text-2xl font-bold text-purple-700 mb-1">{formatCurrency(stats?.total_net_revenue || 0)}</p>
+                        <p className="text-xs text-slate-500">Sau khi trừ hoàn trả</p>
+                    </div>
+                </div>
+
+                {/* Revenue Summary Cards - Row 2: Collection metrics */}
+                <div className="grid gap-4 md:grid-cols-3 mb-6">
+                    <div className="p-5 bg-white rounded-xl shadow-md border-2 border-green-300 hover:shadow-xl transition-shadow">
+                        <div className="flex items-center justify-between mb-2">
                             <p className="text-sm font-semibold text-slate-600 uppercase tracking-wide">Đã thu về</p>
                             <Wallet className="w-5 h-5 text-green-600" />
                         </div>
-                        <p className="text-3xl font-bold text-green-700 mb-2">{formatCurrency(stats?.collected_amount || 0)}</p>
-                        <p className="text-xs text-slate-500">Số tiền đã thu được từ khách hàng</p>
+                        <p className="text-2xl font-bold text-green-700 mb-1">{formatCurrency(stats?.collected_amount || 0)}</p>
+                        <p className="text-xs text-slate-500">Số tiền đã nhận từ khách hàng</p>
                     </div>
-                    <div className="p-6 bg-white rounded-xl shadow-md border-2 border-amber-300 hover:shadow-xl transition-shadow">
-                        <div className="flex items-center justify-between mb-3">
+                    <div className="p-5 bg-white rounded-xl shadow-md border-2 border-amber-300 hover:shadow-xl transition-shadow">
+                        <div className="flex items-center justify-between mb-2">
                             <p className="text-sm font-semibold text-slate-600 uppercase tracking-wide">Còn nợ</p>
                             <TrendingUp className="w-5 h-5 text-amber-600" />
                         </div>
-                        <p className="text-3xl font-bold text-amber-700 mb-2">{formatCurrency(stats?.outstanding_debt || 0)}</p>
-                        <p className="text-xs text-slate-500">Số tiền còn phải thu từ khách hàng</p>
+                        <p className="text-2xl font-bold text-amber-700 mb-1">{formatCurrency(stats?.outstanding_debt || 0)}</p>
+                        <div className="flex items-center gap-3 text-xs text-slate-500 mt-1">
+                            <span className="flex items-center gap-1">
+                                <FileText className="w-3 h-3" />
+                                {stats?.invoices_with_debt || 0} hóa đơn
+                            </span>
+                            <span className="flex items-center gap-1">
+                                <UserCheck className="w-3 h-3" />
+                                {stats?.customers_with_debt || 0} khách hàng
+                            </span>
+                        </div>
+                    </div>
+                    <div className="p-5 bg-white rounded-xl shadow-md border border-slate-200 hover:shadow-xl transition-shadow">
+                        <div className="flex items-center justify-between mb-2">
+                            <p className="text-sm font-semibold text-slate-600 uppercase tracking-wide">Tỷ lệ thu nợ</p>
+                            <CheckCircle2 className="w-5 h-5 text-blue-600" />
+                        </div>
+                        <p className="text-2xl font-bold text-blue-700 mb-1">
+                            {stats?.total_revenue && stats.total_revenue > 0
+                                ? Math.round((stats.collected_amount || 0) / stats.total_revenue * 100)
+                                : 0}%
+                        </p>
+                        <p className="text-xs text-slate-500">Đã thu / Tổng doanh thu</p>
                     </div>
                 </div>
 

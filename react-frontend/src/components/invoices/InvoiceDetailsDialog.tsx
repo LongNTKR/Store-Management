@@ -103,6 +103,14 @@ export function InvoiceDetailsDialog({
             window.URL.revokeObjectURL(url)
 
             toast.success('Đã tải xuống PDF')
+
+            // Invalidate queries to update exported_at status across screens
+            await Promise.all([
+                queryClient.invalidateQueries({ queryKey: ['invoice-returns'] }),
+                queryClient.invalidateQueries({ queryKey: ['customer-returns'] }),
+                queryClient.invalidateQueries({ queryKey: ['customer-invoices'] }),
+                queryClient.invalidateQueries({ queryKey: ['customer-debt-detail'] }),
+            ])
         } catch (error: any) {
             const errorMsg = error?.response?.data?.detail || 'Không thể tải PDF'
             toast.error(errorMsg)
@@ -139,7 +147,16 @@ export function InvoiceDetailsDialog({
                 queryClient.invalidateQueries({ queryKey: ['customer-returns'] }),
                 queryClient.invalidateQueries({ queryKey: ['invoices'] }),
                 queryClient.invalidateQueries({ queryKey: ['customer-invoices'] }),
-                queryClient.invalidateQueries({ queryKey: ['customer-debt-detail'] })
+                queryClient.invalidateQueries({ queryKey: ['customer-debt-detail'] }),
+                // Additional invalidations for cross-screen sync
+                queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
+                queryClient.invalidateQueries({ queryKey: ['statistics'] }),
+                queryClient.invalidateQueries({ queryKey: ['customers'] }),
+                queryClient.invalidateQueries({ queryKey: ['customer-debts'] }),
+                queryClient.invalidateQueries({ queryKey: ['all-customer-debts'] }),
+                queryClient.invalidateQueries({ queryKey: ['customer-payment-history'] }),
+                queryClient.invalidateQueries({ queryKey: ['aging-analysis'] }),
+                queryClient.invalidateQueries({ queryKey: ['products'] }),
             ])
 
         } catch (error: any) {
@@ -330,48 +347,60 @@ export function InvoiceDetailsDialog({
                                     </div>
 
                                     {/* Net Revenue (Actual Revenue after Returns) */}
-                                    <div className="bg-background p-4 rounded-lg border-2 border-purple-300 shadow-sm">
+                                    <div className="bg-background p-4 rounded-lg border-2 border-purple-300 shadow-sm relative overflow-hidden">
                                         <p className="text-sm font-medium text-muted-foreground mb-1 flex items-center justify-between">
                                             <span>💎 Doanh thu thực tế</span>
-                                            {invoice.total_pending_return_amount && invoice.total_pending_return_amount > 0 && (
-                                                <Badge variant="outline" className="bg-amber-50 text-amber-700 text-[10px] px-1.5 py-0">
-                                                    Có pending
+                                            {(invoice.total_pending_return_amount || 0) > 0 && (
+                                                <Badge
+                                                    variant="outline"
+                                                    className="bg-amber-50 text-amber-700 text-[10px] px-1.5 py-0 border-amber-200"
+                                                >
+                                                    Có yêu cầu hoàn trả
                                                 </Badge>
                                             )}
                                         </p>
-                                        <p className={`text-2xl font-bold ${
-                                            (invoice.net_amount !== undefined ? invoice.net_amount : (invoice.total - (invoice.total_returned_amount || 0))) > 0
-                                                ? 'text-purple-600'
-                                                : (invoice.net_amount !== undefined ? invoice.net_amount : (invoice.total - (invoice.total_returned_amount || 0))) < 0
-                                                    ? 'text-red-600'
-                                                    : 'text-gray-600'
-                                        }`}>
+                                        <p className={`text-2xl font-bold ${(invoice.net_amount !== undefined ? invoice.net_amount : (invoice.total - (invoice.total_returned_amount || 0))) > 0
+                                            ? 'text-purple-600'
+                                            : (invoice.net_amount !== undefined ? invoice.net_amount : (invoice.total - (invoice.total_returned_amount || 0))) < 0
+                                                ? 'text-red-600'
+                                                : 'text-gray-600'
+                                            }`}>
                                             {formatCurrency(
                                                 invoice.net_amount !== undefined
                                                     ? invoice.net_amount
                                                     : (invoice.total - (invoice.total_returned_amount || 0))
                                             )}
                                         </p>
-                                        <p className="text-xs text-muted-foreground mt-1">
+                                        <p className="text-xs text-muted-foreground mt-1 mb-3">
                                             Tổng HĐ - Đã hoàn trả
                                         </p>
-                                        {invoice.total_pending_return_amount && invoice.total_pending_return_amount > 0 && (
-                                            <>
-                                                <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
-                                                    <AlertTriangle className="h-3 w-3" />
-                                                    Chờ hoàn: {formatCurrency(invoice.total_pending_return_amount)}
-                                                </p>
+
+                                        {/* Standardized Pending Section */}
+                                        {(invoice.total_pending_return_amount || 0) > 0 && (
+                                            <div className="pt-2 border-t border-dashed border-gray-200 mt-2 space-y-1">
+                                                <div className="flex justify-between items-center text-xs">
+                                                    <span className="text-muted-foreground flex items-center gap-1">
+                                                        <AlertTriangle className="h-3 w-3 text-amber-500" />
+                                                        Chờ hoàn:
+                                                    </span>
+                                                    <span className="font-medium text-amber-600">
+                                                        {formatCurrency(invoice.total_pending_return_amount || 0)}
+                                                    </span>
+                                                </div>
                                                 {invoice.projected_net_amount !== undefined && (
-                                                    <p className="text-xs text-blue-600 mt-0.5 ml-4">
-                                                        → Dự kiến: {formatCurrency(invoice.projected_net_amount)}
-                                                    </p>
+                                                    <div className="flex justify-between items-center text-xs">
+                                                        <span className="text-muted-foreground">→ Dự kiến:</span>
+                                                        <span className="font-bold text-blue-600">
+                                                            {formatCurrency(invoice.projected_net_amount)}
+                                                        </span>
+                                                    </div>
                                                 )}
-                                            </>
+                                            </div>
                                         )}
                                     </div>
 
                                     {/* Remaining Amount */}
-                                    <div className="bg-background p-4 rounded-lg border-2 border-primary/30 shadow-sm">
+                                    <div className="bg-background p-4 rounded-lg border-2 border-primary/30 shadow-sm relative overflow-hidden">
                                         <p className="text-sm font-medium text-muted-foreground mb-1">
                                             {invoice.remaining_amount >= 0 ? '📊 Còn nợ' : '⚠️ Shop nợ khách'}
                                         </p>
@@ -386,16 +415,35 @@ export function InvoiceDetailsDialog({
                                                 : `−${formatCurrency(Math.abs(invoice.remaining_amount))}`
                                             }
                                         </p>
-                                        {invoice.remaining_amount < 0 && (
-                                            <p className="text-xs text-red-600 mt-1 flex items-center gap-1 font-medium">
-                                                <AlertTriangle className="h-3 w-3" />
-                                                Cần trả lại tiền cho khách
-                                            </p>
-                                        )}
-                                        {invoice.remaining_amount === 0 && (
-                                            <p className="text-xs text-emerald-600 mt-1">
-                                                ✓ Đã thanh toán đủ
-                                            </p>
+
+                                        {/* Consistent Subtitle Section */}
+                                        <p className="text-xs text-muted-foreground mt-1 mb-3">
+                                            {invoice.remaining_amount > 0
+                                                ? 'Cần thu từ khách'
+                                                : invoice.remaining_amount < 0
+                                                    ? 'Cần trả lại tiền'
+                                                    : 'Đã thanh toán đủ'}
+                                        </p>
+
+                                        {/* Standardized Pending Section for Debt Card */}
+                                        {(invoice.total_pending_return_amount || 0) > 0 && (
+                                            <div className="pt-2 border-t border-dashed border-gray-200 mt-2 space-y-1">
+                                                <div className="flex justify-between items-center text-xs">
+                                                    <span className="text-muted-foreground flex items-center gap-1">
+                                                        <AlertTriangle className="h-3 w-3 text-amber-500" />
+                                                        Chờ hoàn:
+                                                    </span>
+                                                    <span className="font-medium text-amber-600">
+                                                        {formatCurrency(invoice.total_pending_return_amount || 0)}
+                                                    </span>
+                                                </div>
+                                                <div className="flex justify-between items-center text-xs">
+                                                    <span className="text-muted-foreground">→ Dự kiến:</span>
+                                                    <span className="font-bold text-blue-600">
+                                                        {formatCurrency(invoice.remaining_amount - (invoice.total_pending_return_amount || 0))}
+                                                    </span>
+                                                </div>
+                                            </div>
                                         )}
                                     </div>
                                 </div>

@@ -159,6 +159,8 @@ export interface Statistics {
 
     // Revenue totals (simplified - no breakdown by export status)
     total_revenue: number  // Sum of paid + pending invoice totals
+    total_refunded: number  // Total value of refunded returns
+    total_net_revenue: number  // Net revenue = total_revenue - total_refunded
     collected_amount: number  // Total amount collected (sum of paid_amount)
     outstanding_debt: number  // Total amount outstanding (sum of remaining_amount)
 

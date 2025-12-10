@@ -65,6 +65,8 @@ export function useUpdateInvoiceStatus() {
         onSuccess: (data) => {
             // Invalidate invoices list
             queryClient.invalidateQueries({ queryKey: ['invoices'] })
+            // Invalidate statistics for StatsPage
+            queryClient.invalidateQueries({ queryKey: ['statistics'] })
             // Invalidate dashboard data to sync HomePage
             queryClient.invalidateQueries({ queryKey: ['dashboard'] })
             // Invalidate customers list

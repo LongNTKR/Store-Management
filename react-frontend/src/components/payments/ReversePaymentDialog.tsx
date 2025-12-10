@@ -60,6 +60,10 @@ export function ReversePaymentDialog({
       queryClient.invalidateQueries({ queryKey: ['invoices'] })
       queryClient.invalidateQueries({ queryKey: ['payments'] })
       queryClient.invalidateQueries({ queryKey: ['customer-debt-detail'] })
+      // Additional invalidations for cross-screen sync
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      queryClient.invalidateQueries({ queryKey: ['statistics'] })
+      queryClient.invalidateQueries({ queryKey: ['customers'] })
 
       toast.success('Đã hoàn trả thanh toán thành công')
       onSuccess?.()

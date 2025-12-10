@@ -89,6 +89,10 @@ export function RecordPaymentDialog({
       queryClient.invalidateQueries({ queryKey: ['invoice-payments'] })
       queryClient.invalidateQueries({ queryKey: ['customer-payment-history'] })
       queryClient.invalidateQueries({ queryKey: ['aging-analysis'] })
+      // Additional invalidations for cross-screen sync
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      queryClient.invalidateQueries({ queryKey: ['statistics'] })
+      queryClient.invalidateQueries({ queryKey: ['customers'] })
       toast.success('Ghi nhận thanh toán thành công')
       onSuccess?.()
       onOpenChange(false)

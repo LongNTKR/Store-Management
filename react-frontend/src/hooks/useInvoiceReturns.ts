@@ -67,6 +67,12 @@ export function useCreateReturn() {
       queryClient.invalidateQueries({ queryKey: ['products'] });
       // Invalidate dashboard
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      // Additional invalidations for cross-screen sync
+      queryClient.invalidateQueries({ queryKey: ['statistics'] });
+      queryClient.invalidateQueries({ queryKey: ['customer-payment-history'] });
+      queryClient.invalidateQueries({ queryKey: ['customers'] });
+      queryClient.invalidateQueries({ queryKey: ['customer-invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['customer-returns'] });
 
       toast.success('Hoàn trả hóa đơn thành công!');
     },

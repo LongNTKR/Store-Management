@@ -87,6 +87,13 @@ export function InvoicesPage() {
 
             // Invalidate queries to refresh invoice data with updated exported_at
             queryClient.invalidateQueries({ queryKey: ['invoices'] })
+            // Additional invalidations for cross-screen sync
+            queryClient.invalidateQueries({ queryKey: ['customer-invoices'] })
+            queryClient.invalidateQueries({ queryKey: ['customer-debt-detail'] })
+            queryClient.invalidateQueries({ queryKey: ['customer-debts'] })
+            queryClient.invalidateQueries({ queryKey: ['all-customer-debts'] })
+            queryClient.invalidateQueries({ queryKey: ['aging-analysis'] })
+            queryClient.invalidateQueries({ queryKey: ['dashboard'] })
         } catch (error: any) {
             console.error('Failed to download invoice:', error)
             // Show user-friendly error message
