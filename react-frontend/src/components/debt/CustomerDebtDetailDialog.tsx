@@ -552,7 +552,7 @@ function InvoiceTabContent({ customerId }: { customerId: number }) {
                   return renderReturnRow(item, false)
                 }
 
-                  // Render Invoice Row
+                // Render Invoice Row
                 const invoice = item as Invoice
                 const childrenReturns = returnsByInvoiceId[invoice.id]
 
@@ -579,9 +579,14 @@ function InvoiceTabContent({ customerId }: { customerId: number }) {
                         <div className="flex items-center gap-2">
                           {invoice.invoice_number}
                           {isUnresolved && (
-                            <div title={warningMessage} className="text-amber-600 animate-pulse">
-                              <AlertCircle className="h-4 w-4" />
-                            </div>
+                            <span className="relative inline-flex items-center">
+                              <span className="group relative cursor-help rounded-full border border-dashed border-amber-400 p-0.5">
+                                <AlertCircle className="h-3.5 w-3.5 text-amber-600" />
+                                <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-2 -translate-y-1/2 whitespace-nowrap rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-700 opacity-0 shadow-md transition-opacity group-hover:opacity-100">
+                                  {warningMessage}
+                                </span>
+                              </span>
+                            </span>
                           )}
                         </div>
                       </TableCell>
