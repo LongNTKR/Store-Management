@@ -437,12 +437,28 @@ export function InvoiceDetailsDialog({
                                                         {formatCurrency(invoice.total_pending_return_amount || 0)}
                                                     </span>
                                                 </div>
-                                                <div className="flex justify-between items-center text-xs">
-                                                    <span className="text-muted-foreground">→ Dự kiến:</span>
-                                                    <span className="font-bold text-blue-600">
-                                                        {formatCurrency(invoice.remaining_amount - (invoice.total_pending_return_amount || 0))}
-                                                    </span>
-                                                </div>
+                                                {(() => {
+                                                    const projectedDebt = invoice.remaining_amount - (invoice.total_pending_return_amount || 0);
+                                                    if (projectedDebt >= 0) {
+                                                        return (
+                                                            <div className="flex justify-between items-center text-xs">
+                                                                <span className="text-muted-foreground">→ Dự kiến:</span>
+                                                                <span className="font-bold text-blue-600">
+                                                                    {formatCurrency(projectedDebt)}
+                                                                </span>
+                                                            </div>
+                                                        );
+                                                    } else {
+                                                        return (
+                                                            <div className="flex justify-between items-center text-xs">
+                                                                <span className="text-muted-foreground">→ Shop sẽ hoàn:</span>
+                                                                <span className="font-bold text-red-600">
+                                                                    {formatCurrency(Math.abs(projectedDebt))}
+                                                                </span>
+                                                            </div>
+                                                        );
+                                                    }
+                                                })()}
                                             </div>
                                         )}
                                     </div>

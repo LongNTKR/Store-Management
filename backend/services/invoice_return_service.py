@@ -2,7 +2,7 @@
 
 import os
 from datetime import datetime
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
 from reportlab.lib import colors
@@ -257,7 +257,7 @@ class InvoiceReturnService:
         if not invoice_return:
             raise ValueError(f"Không tìm thấy phiếu hoàn trả với ID {return_id}")
 
-        old_status = invoice_return.status
+        old_status: str = invoice_return.status  # type: ignore
 
         # No change
         if old_status == new_status:
@@ -281,16 +281,19 @@ class InvoiceReturnService:
 
             # Step 3: Create settlement payment (if shop owes customer)
             if settlement_amount > 0:
-                if not invoice_return.refund_payment_id:
-                    # Create payment for SETTLEMENT amount (not full refund amount!)
-                    settlement_payment = self._create_refund_payment(
-                        invoice=invoice,
-                        refund_amount=settlement_amount,  # Actual cash out
-                        payment_method=payment_method,
-                        reason= f"Settlement for return {invoice_return.return_number}: {invoice_return.reason}",
-                        return_number=invoice_return.return_number
-                    )
-                    invoice_return.refund_payment_id = settlement_payment.id
+                # Only create Payment record if customer exists
+                # Guest customers (no customer_id) just get their invoice updated directly
+                if invoice.customer_id:
+                    if invoice_return.refund_payment_id is None:
+                        # Create payment for SETTLEMENT amount (not full refund amount!)
+                        settlement_payment = self._create_refund_payment(
+                            invoice=invoice,
+                            refund_amount=settlement_amount,  # Actual cash out
+                            payment_method=payment_method,
+                            reason= f"Settlement for return {invoice_return.return_number}: {invoice_return.reason}",
+                            return_number=invoice_return.return_number
+                        )
+                        invoice_return.refund_payment_id = settlement_payment.id
 
                 # Step 4: Allocate settlement payment
                 self._allocate_settlement_to_invoice(
@@ -300,10 +303,10 @@ class InvoiceReturnService:
                 # After allocation: refunded_amount += 9M, remaining = 0
 
             # Step 5: Update invoice status
-            if invoice.remaining_amount <= 0.01:  # Float tolerance
+            if invoice.remaining_amount <= 0.01:  # type: ignore # Float tolerance
                 invoice.status = 'paid'
-                invoice.remaining_amount = 0  # Clean up float errors
-            elif invoice.remaining_amount > 0:
+                invoice.remaining_amount = 0  # type: ignore # Clean up float errors
+            elif invoice.remaining_amount > 0:  # type: ignore
                 invoice.status = 'pending'
 
         # Transition: refunded -> pending_refund (BLOCKED)
@@ -463,6 +466,9 @@ class InvoiceReturnService:
                 None
             )
 
+            if not invoice_item:
+                raise ValueError(f"Không tìm thấy sản phẩm với ID {item_data.invoice_item_id} trong hóa đơn này")
+
             # Calculate already returned quantity
             already_returned = self.db.query(
                 func.sum(InvoiceReturnItem.quantity_returned)
@@ -571,16 +577,16 @@ class InvoiceReturnService:
             settlement_amount: Positive value of cash paid to customer (e.g., 9M)
         """
         # Update invoice financial fields
-        invoice.refunded_amount += settlement_amount  # Track cash OUT
-        invoice.remaining_amount += settlement_amount  # Clear the negative balance
+        invoice.refunded_amount += settlement_amount  # type: ignore # Track cash OUT
+        invoice.remaining_amount += settlement_amount  # type: ignore # Clear the negative balance
         # Example: refunded_amount = 0 + 9M = 9M
         #          remaining_amount = -9M + 9M = 0 ✓
 
-        invoice.updated_at = get_vn_time()
+        invoice.updated_at = get_vn_time()  # type: ignore
 
         # Clean up float errors
-        if abs(invoice.remaining_amount) <= 0.01:
-            invoice.remaining_amount = 0
+        if abs(invoice.remaining_amount) <= 0.01:  # type: ignore
+            invoice.remaining_amount = 0  # type: ignore
 
         self.db.flush()
 
@@ -591,12 +597,12 @@ class InvoiceReturnService:
         Args:
             settlement_amount: Positive value of settlement being reversed
         """
-        invoice.refunded_amount -= settlement_amount
-        invoice.remaining_amount -= settlement_amount
+        invoice.refunded_amount -= settlement_amount  # type: ignore
+        invoice.remaining_amount -= settlement_amount  # type: ignore
         # Example: refunded_amount = 9M - 9M = 0
         #          remaining_amount = 0 - 9M = -9M (shop owes customer again)
 
-        invoice.updated_at = get_vn_time()
+        invoice.updated_at = get_vn_time()  # type: ignore
         self.db.flush()
 
     def _create_refund_payment(
@@ -761,7 +767,7 @@ class InvoiceReturnService:
             alignment=1  # Center
         )
 
-        table_data = [[
+        table_data: List[List[Any]] = [[
             Paragraph('<b>STT</b>', header_style),
             Paragraph('<b>Sản phẩm</b>', header_style),
             Paragraph('<b>Đơn giá<br/>(VNĐ)</b>', header_style),
