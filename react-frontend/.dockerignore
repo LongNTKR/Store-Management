@@ -1,0 +1,45 @@
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Build output
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Git
+.git
+.gitignore
+
+# Documentation
+*.md
+docs/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Testing
+.eslintcache
+coverage/
+
+# Logs
+*.log
+logs/
+
+# Package lock files (optional - uncomment if you want to rebuild node_modules)
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml

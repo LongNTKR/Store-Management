@@ -1,10 +1,12 @@
 import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy.orm import Session
 from apscheduler.schedulers.background import BackgroundScheduler
 from api.routes import products, customers, invoices, import_routes, search, dashboard, ai_config, units, payments, debt_reports, invoice_returns
+from api.dependencies import get_db
 from jobs import cleanup_old_deletions, cleanup_processing_invoices
 from config import Config
 
@@ -95,7 +97,46 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy"}
+    """
+    Health check endpoint for Docker/monitoring.
+    Returns basic app status and version info.
+    """
+    from datetime import datetime
+    import pytz
+
+    VN_TZ = pytz.timezone('Asia/Ho_Chi_Minh')
+    current_time = datetime.now(VN_TZ).isoformat()
+
+    return {
+        "status": "healthy",
+        "app": Config.APP_NAME,
+        "version": Config.APP_VERSION,
+        "timestamp": current_time,
+    }
+
+
+@app.get("/health/db")
+async def database_health_check(db: Session = Depends(get_db)):
+    """
+    Database health check endpoint.
+    NOTE: Not used for Docker healthcheck to avoid timeout issues.
+    """
+    from sqlalchemy import text
+
+    try:
+        # Simple query to check database connection
+        db.execute(text("SELECT 1"))
+        return {
+            "status": "healthy",
+            "database": "connected",
+            "path": Config.DATABASE_PATH
+        }
+    except Exception as e:
+        return {
+            "status": "unhealthy",
+            "database": "disconnected",
+            "error": str(e)
+        }
 
 
 if __name__ == "__main__":

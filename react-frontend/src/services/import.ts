@@ -9,7 +9,8 @@ import type {
   ImportResult,
 } from '../types/import'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+// Use empty string for relative URLs (proxied through nginx in Docker)
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 
 /**
  * Check internet connectivity

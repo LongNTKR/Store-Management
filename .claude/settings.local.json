@@ -3,7 +3,8 @@
     "allow": [
       "Bash(python -c:*)",
       "Bash(python test_payment_flow.py:*)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(test:*)"
     ],
     "deny": [],
     "ask": []

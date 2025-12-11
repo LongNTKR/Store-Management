@@ -1,0 +1,84 @@
+# Store Management System - Docker Compose Configuration
+#
+# Quick Start:
+#   1. Build images: docker-compose build
+#   2. Start services: docker-compose up -d
+#   3. View logs: docker-compose logs -f
+#   4. Stop services: docker-compose down
+#
+# Data Management:
+#   - Data location: Docker volume 'backend_data' -> /app/data in container
+#   - Backup: docker run --rm -v store-management_backend_data:/data -v ${PWD}:/backup alpine tar czf /backup/backup.tar.gz /data
+#   - Restore: docker run --rm -v store-management_backend_data:/data -v ${PWD}:/backup alpine tar xzf /backup/backup.tar.gz -C /
+#   - View data: docker volume inspect store-management_backend_data
+#
+# Portable Deployment:
+#   1. Export images: docker save store-management-backend store-management-frontend | gzip > app.tar.gz
+#   2. Copy app.tar.gz to new machine
+#   3. Load images: docker load < app.tar.gz
+#   4. Run: docker-compose up -d
+#   5. Database and directories auto-created on first run
+#
+version: '3.8'
+
+services:
+  # FastAPI Backend
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: store-management-backend
+    ports:
+      - "8000:8000"
+    environment:
+      # Company name - use your desired company name
+      - COMPANY_NAME=Cửa Hàng Gia Đình
+      # Optional: For AI features (OCR, price analysis)
+      # - SECRET_KEY=your-secret-key-here-min-32-chars
+      # Optional: For Google Cloud Vision integration
+      # - GOOGLE_CREDENTIALS_PATH=/app/credentials.json
+    volumes:
+      # Persistent data volume (database, images, invoices)
+      - backend_data:/app/data
+    networks:
+      - store-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # React Frontend (Nginx)
+  frontend:
+    build:
+      context: ./react-frontend
+      dockerfile: Dockerfile
+      args:
+        # Use empty string for relative URLs (nginx proxy handles /api/ routing)
+        # This makes the frontend portable - works on any domain without rebuild
+        - VITE_API_BASE_URL=
+    container_name: store-management-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - store-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  backend_data:
+    # Persistent volume for database, images, and invoices
+    driver: local
+
+networks:
+  store-network:
+    driver: bridge
